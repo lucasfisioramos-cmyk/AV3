@@ -1,24 +1,17 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { RelatorioService } from '../services/relatorio.service.js';
+import { sendSuccess } from '../http/response.js';
+import type { IdParams } from '../schemas/common.schema.js';
 
 export class RelatorioController {
   static async dashboardGeral(_request: FastifyRequest, reply: FastifyReply) {
     const dados = await RelatorioService.obterDashboardGeral();
-    return reply.send(dados);
+    return sendSuccess(reply, dados);
   }
 
-  static async relatorioOrganizacao(request: FastifyRequest, reply: FastifyReply) {
-    const { id } = request.params as { id: string };
-
-    try {
-      const dados = await RelatorioService.obterRelatorioOrganizacao(id);
-      return reply.send(dados);
-    } catch (error: any) {
-      return reply.status(404).send({
-        statusCode: 404,
-        error: 'Not Found',
-        message: error.message || 'Organização não encontrada.',
-      });
-    }
+  // Erros (ex.: organização inexistente) seguem para o handler global.
+  static async relatorioOrganizacao(request: FastifyRequest<{ Params: IdParams }>, reply: FastifyReply) {
+    const dados = await RelatorioService.obterRelatorioOrganizacao(request.params.id);
+    return sendSuccess(reply, dados);
   }
 }

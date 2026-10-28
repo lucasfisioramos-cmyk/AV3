@@ -1,10 +1,12 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import type { JwtClaims } from '../types/auth.js';
 import { UsuarioService } from '../services/usuario.service.js';
+import { sendSuccess } from '../http/response.js';
+import type { LoginRoute } from '../schemas/auth.schema.js';
+import type { JwtClaims } from '../types/auth.js';
 
 export class AuthController {
-  static async login(request: FastifyRequest, reply: FastifyReply) {
-    const { usuario, senha } = request.body as { usuario?: string; senha?: string };
+  static async login(request: FastifyRequest<LoginRoute>, reply: FastifyReply) {
+    const { usuario, senha } = request.body;
 
     const credencial = await UsuarioService.autenticar(usuario, senha);
 
@@ -18,10 +20,10 @@ export class AuthController {
       { expiresIn: '8h' }
     );
 
-    return reply.status(200).send({
-      token,
-      usuario: credencial.usuario,
-      papel: credencial.papel,
-    });
+    return sendSuccess(
+      reply,
+      { token, usuario: credencial.usuario, papel: credencial.papel },
+      { message: 'Login realizado com sucesso.' }
+    );
   }
 }

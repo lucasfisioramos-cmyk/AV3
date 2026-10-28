@@ -1,11 +1,23 @@
 import { FastifyInstance } from 'fastify';
+import { sendSuccess } from '../http/response.js';
+import { healthResponseSchema } from '../schemas/health.schema.js';
 
 export async function healthRoutes(app: FastifyInstance) {
-  app.get('/health', async (_request, reply) => {
-    return reply.status(200).send({
-      status: 'ok',
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString(),
-    });
-  });
+  app.get(
+    '/health',
+    {
+      schema: {
+        tags: ['Sistema'],
+        summary: 'Verifica se a API está no ar',
+        security: [],
+        response: { 200: healthResponseSchema },
+      },
+    },
+    async (_request, reply) =>
+      sendSuccess(reply, {
+        status: 'ok' as const,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      })
+  );
 }

@@ -137,6 +137,43 @@ docker exec -it greencode-app npx tsx prisma/seed.ts
 ```
 
 
+## Contrato da API
+
+### Autenticação
+
+`POST /api/v1/auth/login` retorna um JWT. Envie-o nas demais rotas no cabeçalho `Authorization: Bearer <token>`. O token carrega os claims `sub` (id do usuário), `usuario` e `papel`, definidos em `src/types/auth.ts`.
+
+### Formato das respostas
+
+Toda resposta de sucesso segue o envelope abaixo (`message` e `meta` são opcionais):
+
+```json
+{
+  "data": { },
+  "message": "Lote criado com sucesso.",
+  "meta": { "total": 10 }
+}
+```
+
+Listagens retornam um array em `data` e a quantidade de itens em `meta.total`. Operações sem retorno (ex.: remover usuário) devolvem `"data": null` com `message`.
+
+### Formato dos erros
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Dados da requisição inválidos.",
+  "details": [{ "local": "body", "campo": "cnpj", "mensagem": "Campo obrigatório." }]
+}
+```
+
+`details` aparece apenas em erros de validação (400). Os demais erros trazem somente `statusCode`, `error` e `message`.
+
+### Validação
+
+Os payloads (body e parâmetros de rota) são validados com **Zod** antes de chegar ao controller. Os schemas ficam em `src/schemas/` e alimentam também a documentação Swagger. Os campos devem respeitar os tipos JSON (ex.: `anoFabricacao` é número, não texto). Respostas também passam por schema, então campos que não fazem parte do contrato (como hash de senha) nunca são enviados ao cliente.
+
 ## Documentação da API (Swagger / OpenAPI)
 
 A documentação interativa da API é gerada automaticamente e pode ser acessada após iniciar o servidor:

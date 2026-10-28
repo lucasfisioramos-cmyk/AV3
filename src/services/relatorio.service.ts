@@ -1,4 +1,5 @@
 import { RelatorioRepository } from '../repositories/relatorio.repository.js';
+import { AppError } from '../errors/app-error.js';
 import { OrganizacaoRepository } from '../repositories/organizacao.repository.js';
 
 export class RelatorioService {
@@ -22,7 +23,7 @@ export class RelatorioService {
   static async obterRelatorioOrganizacao(organizacaoId: string) {
     const organizacao = await OrganizacaoRepository.findById(organizacaoId);
     if (!organizacao) {
-      throw new Error('Organização não encontrada.');
+      throw new AppError('Organização não encontrada.', 404);
     }
 
     const metricas = await RelatorioRepository.aggregateMetricasPorOrganizacao(organizacaoId);

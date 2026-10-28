@@ -1,70 +1,52 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { PapelUsuario } from '@prisma/client';
 import { UsuarioService } from '../services/usuario.service.js';
+import { sendCreated, sendSuccess } from '../http/response.js';
+import type {
+  AlterarMinhaSenhaRoute,
+  CriarUsuarioRoute,
+  EditarUsuarioRoute,
+  RemoverUsuarioRoute,
+} from '../schemas/usuario.schema.js';
 
 export class UsuarioController {
   // Criar novo usuário (Apenas ADM)
-  static async store(request: FastifyRequest, reply: FastifyReply) {
-    const body = request.body as {
-      usuario: string;
-      senhaPlana: string;
-      papel: PapelUsuario;
-    };
-
-    const novoUsuario = await UsuarioService.criarUsuario(body);
-    return reply.status(201).send(novoUsuario);
+  static async store(request: FastifyRequest<CriarUsuarioRoute>, reply: FastifyReply) {
+    const novoUsuario = await UsuarioService.criarUsuario(request.body);
+    return sendCreated(reply, novoUsuario, { message: 'Usuário criado com sucesso.' });
   }
 
   // Editar usuário (Apenas ADM)
-  static async update(request: FastifyRequest, reply: FastifyReply) {
-    const usuarioAutenticado = request.user;
-    const { id } = request.params as { id: string };
-    const body = request.body as {
-      usuario?: string;
-      senha?: string;
-      papel?: PapelUsuario;
-    };
+  static async update(request: FastifyRequest<EditarUsuarioRoute>, reply: FastifyReply) {
+    const { id } = request.params;
+    const { usuario, senha, papel } = request.body;
 
     const usuarioAtualizado = await UsuarioService.editarUsuario({
       idUsuarioAlvo: id,
-      idUsuarioExecuto: usuarioAutenticado.sub,
-      novoUsuario: body.usuario,
-      novaSenha: body.senha,
-      novoPapel: body.papel,
+      idUsuarioExecuto: request.user.sub,
+      novoUsuario: usuario,
+      novaSenha: senha,
+      novoPapel: papel,
     });
 
-    return reply.send({
-      mensagem: 'Usuário atualizado com sucesso!',
-      usuario: usuarioAtualizado,
-    });
+    return sendSuccess(reply, usuarioAtualizado, { message: 'Usuário atualizado com sucesso!' });
   }
 
   // Alterar a própria senha (Qualquer usuário autenticado)
-  static async updateMinhaSenha(request: FastifyRequest, reply: FastifyReply) {
-    const usuarioAutenticado = request.user;
-    const { novaSenha } = request.body as { novaSenha?: string };
-
-    if (!novaSenha) {
-      return reply.status(400).send({
-        statusCode: 400,
-        error: 'BadRequest',
-        message: 'A nova senha é obrigatória.',
-      });
-    }
+  static async updateMinhaSenha(request: FastifyRequest<AlterarMinhaSenhaRoute>, reply: FastifyReply) {
+    const idUsuario = request.user.sub;
 
     await UsuarioService.editarUsuario({
-      idUsuarioAlvo: usuarioAutenticado.sub,
-      idUsuarioExecuto: usuarioAutenticado.sub,
-      novaSenha,
+      idUsuarioAlvo: idUsuario,
+      idUsuarioExecuto: idUsuario,
+      novaSenha: request.body.novaSenha,
     });
 
-    return reply.send({ mensagem: 'Sua senha foi alterada com sucesso!' });
+    return sendSuccess(reply, null, { message: 'Sua senha foi alterada com sucesso!' });
   }
 
   // Deletar usuário (Apenas ADM)
-  static async delete(request: FastifyRequest, reply: FastifyReply) {
-    const { id } = request.params as { id: string };
-    await UsuarioService.deletarUsuario(id);
-    return reply.send({ mensagem: 'Usuário removido com sucesso!' });
+  static async delete(request: FastifyRequest<RemoverUsuarioRoute>, reply: FastifyReply) {
+    await UsuarioService.deletarUsuario(request.params.id);
+    return sendSuccess(reply, null, { message: 'Usuário removido com sucesso!' });
   }
 }

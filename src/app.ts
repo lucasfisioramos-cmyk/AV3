@@ -8,6 +8,8 @@ import { env } from './config/env.js';
 import { organizacaoRoutes } from './routes/organizacao.js';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
+import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
+import './config/zod.js';
 import { authenticate } from './security/authenticate.js';
 import { errorHandler } from './errors/error-handler.js';
 import { usuarioRoutes } from './routes/usuario.js';
@@ -18,6 +20,10 @@ export const app = Fastify({
   logger: true,
 });
 
+// Validação de entrada e serialização de saída via schemas Zod
+app.setValidatorCompiler(validatorCompiler);
+app.setSerializerCompiler(serializerCompiler);
+
 // Registrar o plugin JWT
 app.register(fastifyJwt, {
   secret: env.JWT_SECRET,
@@ -27,6 +33,7 @@ app.register(fastifyJwt, {
 app.decorate('authenticate', authenticate);
 
 await app.register(fastifySwagger, {
+  transform: jsonSchemaTransform,
   openapi: {
     info: {
       title: 'Greencode API',
