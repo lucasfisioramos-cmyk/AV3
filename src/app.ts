@@ -1,4 +1,4 @@
-import Fastify, { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
+import Fastify, { FastifyRequest } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { loteRoutes } from './routes/lote.js';
 import { equipamentoRoutes } from './routes/equipamento.js';
@@ -8,7 +8,8 @@ import { env } from './config/env.js';
 import { organizacaoRoutes } from './routes/organizacao.js';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
-import { AppError } from './errors/app-error.js';
+import { UnauthorizedError } from './errors/app-error.js';
+import { errorHandler } from './errors/error-handler.js';
 import { usuarioRoutes } from './routes/usuario.js';
 import { authRoutes } from './routes/auth.js';
 
@@ -22,16 +23,12 @@ app.register(fastifyJwt, {
   secret: env.JWT_SECRET,
 });
 
-// Decorador para verificar autenticação via JWT
-app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
+// Decorador para verificar autenticação via JWT (falhas seguem para o handler global)
+app.decorate('authenticate', async (request: FastifyRequest) => {
   try {
     await request.jwtVerify();
-  } catch (err) {
-    return reply.status(401).send({
-      statusCode: 401,
-      error: 'Unauthorized',
-      message: 'Token de autenticação inválido ou ausente.',
-    });
+  } catch {
+    throw new UnauthorizedError();
   }
 });
 
@@ -73,39 +70,5 @@ app.register(equipamentoRoutes, { prefix: '/api/v1/equipamentos' });
 app.register(relatorioRoutes, { prefix: '/api/v1/relatorios' });
 app.register(usuarioRoutes, { prefix: '/api/v1/usuarios' });
 
-// Handler Global de Erros
-app.setErrorHandler((error: any, _request, reply) => {
-  // 1. Tratar erros de regra de negócio customizados (AppError)
-  if (error instanceof AppError) {
-    const errorLabel =
-      error.statusCode === 404
-        ? 'Not Found'
-        : error.statusCode === 409
-        ? 'Conflict'
-        : 'Bad Request';
-
-    return reply.status(error.statusCode).send({
-      statusCode: error.statusCode,
-      error: errorLabel,
-      message: error.message,
-    });
-  }
-
-  // 2. Tratar erros nativos de validação do Fastify / Zod (Status 400)
-  if (error.statusCode === 400) {
-    return reply.status(400).send({
-      statusCode: 400,
-      error: 'Bad Request',
-      message: error.message,
-    });
-  }
-
-  // 3. Fallback para erros não tratados de servidor (Status 500)
-  app.log.error(error);
-
-  return reply.status(500).send({
-    statusCode: 500,
-    error: 'Internal Server Error',
-    message: 'Ocorreu um erro interno no servidor.',
-  });
-});
+// Handler Global de Erros (mapeamento centralizado em src/errors)
+app.setErrorHandler(errorHandler);
