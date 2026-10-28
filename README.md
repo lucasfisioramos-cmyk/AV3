@@ -2,7 +2,7 @@
 
 > **API RESTful robusta desenvolvida para a gestão e rastreabilidade de ativos eletrônicos em processos de logística reversa, triagem e desmonte.**
 
-Este projeto é a evolução da aplicação CLI para uma arquitetura monolítica moderna em camadas, utilizando **Fastify**, **TypeScript** e **Prisma ORM** com **PostgreSQL** / **SQLite**, em conformidade com as diretrizes de avaliação da FATEC.
+Este projeto é a evolução da aplicação CLI para uma arquitetura monolítica moderna em camadas, utilizando **Fastify**, **TypeScript** e **Prisma ORM** com **PostgreSQL**, em conformidade com as diretrizes de avaliação da FATEC.
 
 ---
 
@@ -21,23 +21,30 @@ O projeto segue o padrão **Controller-Service-Repository (CSR)**:
 
 Para executar o projeto localmente, certifique-se de ter instalado:
 
-* **Node.js** (v18.x, v20.x ou superior)
+* **Node.js** (v20.x ou superior)
 * **npm** (v9.x ou superior)
+* **PostgreSQL** (v14 ou superior) em execução e com um banco criado para o projeto
 * **Docker & Docker Compose** *(opcional, para execução isolada em container)*
 
 ---
 
 ## ⚙️ Variáveis de Ambiente
 
-renomear o arquivo `.env.example` para `.env` na raiz do projeto e insira os seus dados. conforme exemplo:
+Copie o arquivo `.env.example` para `.env` na raiz do projeto e preencha com os seus dados:
 
-```env
-PORT=3000
-HOST=0.0.0.0
-NODE_ENV=development
-DATABASE_URL=DATABASE_URL="postgresql://seu_usuario:seu_password@localhost:5432/nome_do_banco_de_dados"
-JWT_SECRET="greencode_super_secret_jwt_key_2026"
+```bash
+cp .env.example .env
 ```
+
+| Variável | Obrigatória | Descrição |
+| --- | --- | --- |
+| `NODE_ENV` | Sim | `development`, `production` ou `test`. |
+| `DATABASE_URL` | Sim | String de conexão PostgreSQL (`postgresql://usuario:senha@host:5432/banco`). |
+| `JWT_SECRET` | Sim | Segredo de assinatura do JWT. Em produção, mínimo de 32 caracteres. |
+| `PORT` | Não | Porta HTTP (padrão `3000`). |
+| `HOST` | Não | Interface de escuta (padrão `0.0.0.0`). |
+
+A aplicação **não inicia** se alguma variável obrigatória estiver ausente ou inválida.
 
 ---
 
