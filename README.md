@@ -63,7 +63,7 @@ npm install
 
 ### 2. Configurar o Banco de Dados e Carga Inicial (Seed)
 
-Execute o comando unificado de setup, que aplica as migrações e popula o banco com dados de teste:
+Com o PostgreSQL rodando e o `.env` preenchido, execute o comando unificado (gera o Prisma Client, aplica as migrações e popula o banco):
 
 ```bash
 npm run setup
@@ -72,14 +72,9 @@ npm run setup
 Ou execute os passos individualmente:
 
 ```bash
-# Gerar os tipos do Prisma Client
-npm run prisma:generate
-
-# Executar as migrações no banco
-npm run prisma:migrate
-
-# Executar o seed (povoamento inicial de usuários, organizações, lotes e equipamentos)
-npm run prisma:seed
+npm run db:generate   # gera o Prisma Client
+npm run db:migrate    # aplica as migrações (desenvolvimento)
+npm run db:seed       # carga inicial (usuário admin)
 ```
 
 ### 3. Executar a Aplicação
@@ -91,12 +86,27 @@ npm run dev
 
 #### Modo Produção (Compilado)
 ```bash
-# Compilar TypeScript
-npm run build
-
-# Iniciar servidor compilado
-npm run start
+npm run build         # compila o TypeScript para dist/
+npm run start         # inicia dist/server.js
 ```
+
+Em ambientes de produção/CI, aplique as migrações com `npm run db:migrate:deploy` (não cria migrações nem pede interação).
+
+### Scripts disponíveis
+
+| Script | Função |
+| --- | --- |
+| `npm install` | Instala as dependências |
+| `npm run db:generate` | Gera o Prisma Client |
+| `npm run db:migrate` | Aplica migrações em desenvolvimento (`prisma migrate dev`) |
+| `npm run db:migrate:deploy` | Aplica migrações pendentes em produção/CI |
+| `npm run db:seed` | Executa o seed |
+| `npm run db:studio` | Abre o Prisma Studio |
+| `npm run dev` | Servidor em modo desenvolvimento com hot-reload |
+| `npm run build` | Compila o TypeScript |
+| `npm run start` | Inicia o servidor compilado (produção) |
+| `npm run typecheck` | Verifica tipos sem emitir arquivos |
+| `npm run setup` | `db:generate` + `db:migrate` + `db:seed` |
 
 A API estará acessível em `http://localhost:3000`.
 
@@ -112,14 +122,17 @@ docker build -t greencode-api .
 
 
 ### Rodar o container
+
+O container não inclui o `.env`; as variáveis são passadas em tempo de execução. Como o `localhost` dentro do container não é o da sua máquina, ajuste o host do banco em `DATABASE_URL` (ex.: `host.docker.internal` no Windows/macOS ou o IP do host no Linux). Atenção: o `--env-file` do Docker não remove aspas, então no arquivo usado com ele os valores devem ficar **sem aspas**.
+
 ```
-docker run -d -p 3000:3000 --name greencode-app greencode-api
+docker run -d -p 3000:3000 --env-file .env --name greencode-app greencode-api
 ```
 
 ## 3. Executar Migrações e Seed dentro do Container
 
 ```
-docker exec -it greencode-app npx prisma migrate dev
+docker exec -it greencode-app npx prisma migrate deploy
 docker exec -it greencode-app npx tsx prisma/seed.ts
 ```
 
@@ -135,7 +148,7 @@ URL da Documentação: http://localhost:3000/docs
 Para garantir a estrita conformidade do TypeScript sem emissão de erros:
 
 ```
-npx tsc --noEmit
+npm run typecheck
 ```
 
 ## Compatibilidade
