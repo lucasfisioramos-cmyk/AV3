@@ -19,7 +19,7 @@ export const app = Fastify({
 
 // Registrar o plugin JWT
 app.register(fastifyJwt, {
-  secret: env.JWT_SECRET || 'fallback_secret_key',
+  secret: env.JWT_SECRET,
 });
 
 // Decorador para verificar autenticação via JWT
