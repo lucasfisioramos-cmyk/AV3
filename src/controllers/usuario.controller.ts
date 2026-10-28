@@ -17,7 +17,7 @@ export class UsuarioController {
 
   // Editar usuário (Apenas ADM)
   static async update(request: FastifyRequest, reply: FastifyReply) {
-    const usuarioAutenticado = request.user as { sub: string };
+    const usuarioAutenticado = request.user;
     const { id } = request.params as { id: string };
     const body = request.body as {
       usuario?: string;
@@ -41,7 +41,7 @@ export class UsuarioController {
 
   // Alterar a própria senha (Qualquer usuário autenticado)
   static async updateMinhaSenha(request: FastifyRequest, reply: FastifyReply) {
-    const usuarioAutenticado = request.user as { sub: string };
+    const usuarioAutenticado = request.user;
     const { novaSenha } = request.body as { novaSenha?: string };
 
     if (!novaSenha) {

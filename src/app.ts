@@ -1,4 +1,4 @@
-import Fastify, { FastifyRequest } from 'fastify';
+import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { loteRoutes } from './routes/lote.js';
 import { equipamentoRoutes } from './routes/equipamento.js';
@@ -8,7 +8,7 @@ import { env } from './config/env.js';
 import { organizacaoRoutes } from './routes/organizacao.js';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
-import { UnauthorizedError } from './errors/app-error.js';
+import { authenticate } from './security/authenticate.js';
 import { errorHandler } from './errors/error-handler.js';
 import { usuarioRoutes } from './routes/usuario.js';
 import { authRoutes } from './routes/auth.js';
@@ -23,14 +23,8 @@ app.register(fastifyJwt, {
   secret: env.JWT_SECRET,
 });
 
-// Decorador para verificar autenticação via JWT (falhas seguem para o handler global)
-app.decorate('authenticate', async (request: FastifyRequest) => {
-  try {
-    await request.jwtVerify();
-  } catch {
-    throw new UnauthorizedError();
-  }
-});
+// Decorador de autenticação JWT (implementação em src/security/authenticate.ts)
+app.decorate('authenticate', authenticate);
 
 await app.register(fastifySwagger, {
   openapi: {

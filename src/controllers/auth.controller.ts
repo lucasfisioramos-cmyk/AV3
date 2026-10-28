@@ -1,4 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+import type { JwtClaims } from '../types/auth.js';
 import { UsuarioService } from '../services/usuario.service.js';
 
 export class AuthController {
@@ -13,7 +14,7 @@ export class AuthController {
         sub: credencial.id,
         usuario: credencial.usuario,
         papel: credencial.papel,
-      },
+      } satisfies JwtClaims,
       { expiresIn: '8h' }
     );
 
