@@ -15,5 +15,6 @@ export function errorHandler(error: FastifyError, request: FastifyRequest, reply
     statusCode: mapped.statusCode,
     error: mapped.error,
     message: mapped.message,
+    ...(mapped.details ? { details: mapped.details } : {}),
   });
 }

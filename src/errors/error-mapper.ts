@@ -6,10 +6,19 @@ import {
 } from '@prisma/client/runtime/library';
 import { AppError } from './app-error.js';
 
+export interface ValidationDetail {
+  /** Onde ocorreu: body, params, querystring ou headers. */
+  local?: string;
+  /** Caminho do campo (ex.: "cnpj" ou "itens.0.nome"). */
+  campo: string;
+  mensagem: string;
+}
+
 export interface MappedError {
   statusCode: number;
   error: string;
   message: string;
+  details?: ValidationDetail[];
   /** Erros 5xx (e falhas inesperadas) devem ser logados com stack completo. */
   shouldLogAsError: boolean;
 }
@@ -55,6 +64,32 @@ function mapPrismaKnownError(err: PrismaClientKnownRequestError): MappedError {
   }
 }
 
+interface FastifyValidationIssue {
+  instancePath?: string;
+  message?: string;
+  params?: { missingProperty?: string };
+}
+
+function hasValidationIssues(
+  err: unknown
+): err is { validation: FastifyValidationIssue[]; validationContext?: string } {
+  return typeof err === 'object' && err !== null && Array.isArray((err as { validation?: unknown }).validation);
+}
+
+/** Converte os issues de validação (Zod ou AJV) em detalhes por campo. */
+function mapValidationIssues(err: { validation: FastifyValidationIssue[]; validationContext?: string }): MappedError {
+  const details = err.validation.map((issue): ValidationDetail => {
+    const caminho = (issue.instancePath ?? '').split('/').filter(Boolean);
+    if (issue.params?.missingProperty) caminho.push(issue.params.missingProperty);
+    return {
+      local: err.validationContext,
+      campo: caminho.join('.'),
+      mensagem: issue.message ?? 'Valor inválido.',
+    };
+  });
+  return { ...build(400, 'Dados da requisição inválidos.'), details };
+}
+
 function hasNumericStatus(err: unknown): err is { statusCode: number; code?: string; message: string } {
   return (
     typeof err === 'object' &&
@@ -84,7 +119,12 @@ export function mapError(error: unknown): MappedError {
     return build(503, 'Banco de dados indisponível. Tente novamente em instantes.');
   }
 
-  // 3. Erros nativos do Fastify e de plugins (validação, JWT, payload, rate limit...)
+  // 3. Validação de schema (Zod/AJV) -> 400 com detalhes por campo
+  if (hasValidationIssues(error)) {
+    return mapValidationIssues(error);
+  }
+
+  // 4. Erros nativos do Fastify e de plugins (validação, JWT, payload, rate limit...)
   if (hasNumericStatus(error) && error.statusCode >= 400 && error.statusCode < 500) {
     if (typeof error.code === 'string' && error.code.startsWith('FST_JWT_')) {
       return build(401, 'Token de autenticação inválido ou ausente.');
@@ -92,6 +132,6 @@ export function mapError(error: unknown): MappedError {
     return build(error.statusCode, error.message);
   }
 
-  // 4. Qualquer outra coisa é falha inesperada
+  // 5. Qualquer outra coisa é falha inesperada
   return { ...build(500, INTERNAL_MESSAGE), shouldLogAsError: true };
 }
