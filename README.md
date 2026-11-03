@@ -13,7 +13,7 @@ O projeto segue o padrão **Controller-Service-Repository (CSR)**:
 * **Routes (`src/routes`)**: Definição declarativa dos endpoints HTTP com suporte a autenticação stateless JWT e controle de acesso baseado em papéis (**RBAC**).
 * **Controllers (`src/controllers`)**: Manipulação de requisições e respostas HTTP.
 * **Domínio (`src/domain/<módulo>`)**: um módulo por contexto (`usuario`, `auth`, `organizacao`, `lote`, `equipamento`, `relatorio`). Cada um tem um `*.service.ts` (orquestra: carrega dados, aplica regras, persiste) e um `*.rules.ts` (as regras de negócio, em funções explícitas e nomeadas). Veja a seção abaixo.
-* **Repositories (`src/repositories`)**: Abstração da camada de persistência com chamadas otimizadas do **Prisma Client**.
+* **Repositories (`src/repositories`)**: Única camada que conversa com o **Prisma Client**, atrás de interfaces padronizadas (veja "Camada de Persistência").
 
 ---
 
@@ -106,6 +106,7 @@ Em ambientes de produção/CI, aplique as migrações com `npm run db:migrate:de
 | `npm run build` | Compila o TypeScript |
 | `npm run start` | Inicia o servidor compilado (produção) |
 | `npm run typecheck` | Verifica tipos sem emitir arquivos |
+| `npm run check:arquitetura` | Falha se o Prisma for usado fora da camada de persistência |
 | `npm run setup` | `db:generate` + `db:migrate` + `db:seed` |
 
 A API estará acessível em `http://localhost:3000`.
@@ -179,6 +180,38 @@ Não se usa transação em escrita única ou quando o banco já garante a invari
 | Alterar estado físico | Não | Escrita única com `version` |
 | Criar usuário, organização, lote | Não | Escrita única (unicidade na constraint) |
 | Relatórios | Não | Somente leitura |
+
+## Camada de Persistência
+
+```
+src/persistence/   # client.ts (fábrica do PrismaClient), prisma.ts (instância única), transaction.ts
+src/repositories/  # entities.ts, base.repository.ts e um repositório por agregado
+```
+
+**Regras**
+
+- A instância do Prisma é criada em um só lugar (`src/persistence/prisma.ts`) e só `src/repositories` e `src/persistence` a importam. Serviços e controllers nunca tocam o Prisma; `npm run check:arquitetura` verifica isso.
+- Os enums do Prisma chegam ao restante do código por `src/domain/shared/enums.ts` (único ponto de contato).
+- Os repositórios devolvem tipos próprios (`src/repositories/entities.ts`), não os modelos do Prisma, e não contêm regra de negócio nem decidem transações.
+
+**Contrato padrão** (`CrudRepository`), seguido por `UsuarioRepository`, `OrganizacaoRepository`, `LoteRepository` e `EquipamentoRepository`:
+
+| Método | Observação |
+| --- | --- |
+| `findById(id, tx?)` | Retorna `null` se não existir |
+| `findAll(filtro?, tx?)` | Filtros tipados por entidade |
+| `create(data, tx?)` | |
+| `update(id, data, tx?)` | Id inexistente lança P2025 (vira 404) |
+| `delete(id, tx?)` | Retorna `void`; id inexistente lança P2025 |
+| `count(filtro?, tx?)` | |
+
+Leituras específicas de um caso de uso têm nome próprio (`listarComResumo`, `findDetalheById`, `findCredencialByUsuario`, `atualizarComVersao`...). O `RelatorioRepository` só tem consultas agregadas e por isso não segue o contrato CRUD.
+
+**Dados sensíveis**
+
+- `hashSenha` e `salt` nunca são retornados por padrão: todas as operações de `UsuarioRepository` usam `select` explícito.
+- O único método que devolve o hash é `findCredencialByUsuario`, usado somente na autenticação.
+- Listagens e detalhes trazem apenas os campos necessários (ex.: a organização de um lote vem como `id`, `razaoSocial` e `cnpj`).
 
 ## Contrato da API
 

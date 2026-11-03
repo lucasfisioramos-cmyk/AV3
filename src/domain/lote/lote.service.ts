@@ -1,5 +1,6 @@
 import { LoteRepository } from '../../repositories/lote.repository.js';
 import { OrganizacaoRepository } from '../../repositories/organizacao.repository.js';
+import { StatusLote } from '../shared/enums.js';
 import { exigirEncontrado } from '../shared/guards.js';
 import { LoteRules } from './lote.rules.js';
 
@@ -29,14 +30,21 @@ export class LoteService {
     );
     LoteRules.garantirNotaFiscalInedita(data.notaFiscal, loteExistente);
 
-    return LoteRepository.create(data);
+    return LoteRepository.create({
+      organizacaoId: data.organizacaoId,
+      notaFiscal: data.notaFiscal,
+      transportadora: data.transportadora,
+      observacoes: data.observacoes,
+      dataEntrada,
+      statusProcessamento: StatusLote.RECEBIDO, // todo lote nasce como RECEBIDO
+    });
   }
 
   static async listarLotes() {
-    return LoteRepository.findAll();
+    return LoteRepository.listarComResumo();
   }
 
   static async buscarPorId(id: string) {
-    return exigirEncontrado(await LoteRepository.findById(id), 'Lote não encontrado.');
+    return exigirEncontrado(await LoteRepository.findDetalheById(id), 'Lote não encontrado.');
   }
 }

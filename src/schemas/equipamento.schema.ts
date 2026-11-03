@@ -5,7 +5,7 @@ import {
   estadoFisicoSchema,
   loteSchema,
   movimentacaoSchema,
-  organizacaoSchema,
+  organizacaoResumoSchema,
   statusRastreamentoSchema,
   tipoEquipamentoSchema,
 } from './entities.schema.js';
@@ -60,7 +60,7 @@ export const movimentarEquipamentoResponseSchema = envelope(
 
 export const rastrearEquipamentoResponseSchema = envelope(
   equipamentoSchema.extend({
-    lote: loteSchema.extend({ organizacao: organizacaoSchema }),
+    lote: loteSchema.extend({ organizacao: organizacaoResumoSchema }),
     historicoMovimentacao: z.array(movimentacaoSchema),
   })
 );

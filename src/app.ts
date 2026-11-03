@@ -27,7 +27,11 @@ app.setSerializerCompiler(serializerCompiler);
 
 // Libera as conexões do banco ao encerrar o servidor
 app.addHook('onClose', async () => {
-  await desconectarBanco();
+  try {
+    await desconectarBanco();
+  } catch (err) {
+    app.log.error({ err }, 'Falha ao desconectar do banco de dados');
+  }
 });
 
 // Registrar o plugin JWT

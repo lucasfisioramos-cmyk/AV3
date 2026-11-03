@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { envelope, listEnvelope, type IdParams } from './common.schema.js';
-import { equipamentoSchema, loteSchema, organizacaoSchema } from './entities.schema.js';
+import { equipamentoSchema, loteSchema, organizacaoResumoSchema } from './entities.schema.js';
 
 export const criarLoteBodySchema = z.object({
   organizacaoId: z.uuid(),
@@ -16,13 +16,13 @@ export type BuscarLoteRoute = { Params: IdParams };
 export const loteCriadoResponseSchema = envelope(loteSchema);
 
 export const loteListaItemSchema = loteSchema.extend({
-  organizacao: organizacaoSchema.pick({ id: true, razaoSocial: true, cnpj: true }),
-  _count: z.object({ equipamentos: z.number().int() }),
+  organizacao: organizacaoResumoSchema,
+  totalEquipamentos: z.number().int(),
 });
 export const listarLotesResponseSchema = listEnvelope(loteListaItemSchema);
 
 export const loteDetalheSchema = loteSchema.extend({
-  organizacao: organizacaoSchema,
+  organizacao: organizacaoResumoSchema,
   equipamentos: z.array(equipamentoSchema),
 });
 export const loteDetalheResponseSchema = envelope(loteDetalheSchema);

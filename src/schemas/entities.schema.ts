@@ -22,6 +22,8 @@ export const organizacaoSchema = z.object({
   updatedAt: dateTimeSchema,
 });
 
+export const organizacaoResumoSchema = organizacaoSchema.pick({ id: true, razaoSocial: true, cnpj: true });
+
 export const loteSchema = z.object({
   id: z.string(),
   dataEntrada: dateTimeSchema,

@@ -1,64 +1,99 @@
-import { Equipamento, StatusRastreamento, EstadoFisico, TipoEquipamento } from '@prisma/client';
 import { prisma } from '../persistence/prisma.js';
 import type { Transacao } from '../persistence/transaction.js';
+import type { EstadoFisico, StatusRastreamento, TipoEquipamento } from '../domain/shared/enums.js';
+import type { CrudRepository } from './base.repository.js';
+import type { Equipamento, Lote, Movimentacao, OrganizacaoResumo } from './entities.js';
 
-/**
- * Persistência pura de equipamentos e movimentações.
- * Regras de negócio e decisões de transação ficam no EquipamentoService.
- */
-export class EquipamentoRepository {
-  // 1. Buscar Equipamento por ID
-  static async findById(id: string, db: Transacao = prisma): Promise<Equipamento | null> {
-    return db.equipamento.findUnique({ where: { id } });
+export interface CriarEquipamentoData {
+  loteId: string;
+  codigoBarrasInterno: string;
+  tipo: TipoEquipamento;
+  marca: string;
+  modelo: string;
+  anoFabricacao: number;
+  estadoFisico: EstadoFisico;
+  pesoQuilogramas: number;
+  posicaoNoLote: number;
+  statusRastreamento: StatusRastreamento;
+}
+
+export interface AtualizarEquipamentoData {
+  marca?: string;
+  modelo?: string;
+  estadoFisico?: EstadoFisico;
+  statusRastreamento?: StatusRastreamento;
+}
+
+export interface EquipamentoFiltro {
+  loteId?: string;
+  statusRastreamento?: StatusRastreamento;
+}
+
+export interface RegistrarMovimentacaoData {
+  equipamentoId: string;
+  origem: string;
+  destino: string;
+  responsavel: string;
+  observacao?: string;
+}
+
+/** Visão de rastreamento: equipamento + lote (com organização resumida) + histórico. */
+export interface EquipamentoRastreado extends Equipamento {
+  lote: Lote & { organizacao: OrganizacaoResumo };
+  historicoMovimentacao: Movimentacao[];
+}
+
+export interface EquipamentoRepository
+  extends CrudRepository<Equipamento, CriarEquipamentoData, AtualizarEquipamentoData, EquipamentoFiltro> {
+  findDetalheByIdentificador(identificador: string, tx?: Transacao): Promise<EquipamentoRastreado | null>;
+  /**
+   * Optimistic locking: só grava se `version` ainda for `versaoAtual` e incrementa a versão.
+   * Retorna null quando a versão está desatualizada (outro processo alterou o registro).
+   */
+  atualizarComVersao(
+    id: string,
+    versaoAtual: number,
+    data: Pick<AtualizarEquipamentoData, 'estadoFisico' | 'statusRastreamento'>,
+    tx?: Transacao
+  ): Promise<Equipamento | null>;
+  /** O histórico pertence ao agregado Equipamento; não há repositório próprio de Movimentacao. */
+  registrarMovimentacao(data: RegistrarMovimentacaoData, tx?: Transacao): Promise<Movimentacao>;
+}
+
+class PrismaEquipamentoRepository implements EquipamentoRepository {
+  findById(id: string, tx?: Transacao) {
+    return (tx ?? prisma).equipamento.findUnique({ where: { id } });
   }
 
-  // 2. Contar quantidade de equipamentos vinculados a um Lote (sequência do código de barras)
-  static async countByLoteId(loteId: string, db: Transacao = prisma): Promise<number> {
-    return db.equipamento.count({ where: { loteId } });
+  findAll(filtro: EquipamentoFiltro = {}, tx?: Transacao) {
+    return (tx ?? prisma).equipamento.findMany({ where: filtro, orderBy: { createdAt: 'desc' } });
   }
 
-  // 3. Buscar Equipamento por ID ou Código de Barras Interno com relacionamentos
-  static async findByIdentificador(identificador: string) {
-    return prisma.equipamento.findFirst({
-      where: {
-        OR: [{ id: identificador }, { codigoBarrasInterno: identificador }],
-      },
+  findDetalheByIdentificador(identificador: string, tx?: Transacao) {
+    return (tx ?? prisma).equipamento.findFirst({
+      where: { OR: [{ id: identificador }, { codigoBarrasInterno: identificador }] },
       include: {
-        lote: { include: { organizacao: true } },
-        historicoMovimentacao: true,
+        lote: { include: { organizacao: { select: { id: true, razaoSocial: true, cnpj: true } } } },
+        historicoMovimentacao: { orderBy: { dataHora: 'asc' } },
       },
     });
   }
 
-  // 4. Criar Equipamento
-  static async create(
-    data: {
-      loteId: string;
-      codigoBarrasInterno: string;
-      tipo: TipoEquipamento;
-      marca: string;
-      modelo: string;
-      anoFabricacao: number;
-      estadoFisico: EstadoFisico;
-      pesoQuilogramas: number;
-      posicaoNoLote: number;
-      statusRastreamento: StatusRastreamento;
-    },
-    db: Transacao = prisma
-  ) {
-    return db.equipamento.create({ data });
+  create(data: CriarEquipamentoData, tx?: Transacao) {
+    return (tx ?? prisma).equipamento.create({ data });
   }
 
-  /**
-   * 5. Atualização com Optimistic Locking: só grava se `version` ainda for a informada
-   * e incrementa a versão. Retorna null quando a versão está desatualizada.
-   */
-  static async atualizarComVersao(
+  update(id: string, data: AtualizarEquipamentoData, tx?: Transacao) {
+    return (tx ?? prisma).equipamento.update({ where: { id }, data });
+  }
+
+  async atualizarComVersao(
     id: string,
     versaoAtual: number,
-    data: { statusRastreamento?: StatusRastreamento; estadoFisico?: EstadoFisico },
-    db: Transacao = prisma
-  ): Promise<Equipamento | null> {
+    data: Pick<AtualizarEquipamentoData, 'estadoFisico' | 'statusRastreamento'>,
+    tx?: Transacao
+  ) {
+    const db = tx ?? prisma;
     const { count } = await db.equipamento.updateMany({
       where: { id, version: versaoAtual },
       data: { ...data, version: { increment: 1 } },
@@ -68,17 +103,17 @@ export class EquipamentoRepository {
     return db.equipamento.findUnique({ where: { id } });
   }
 
-  // 6. Registrar movimentação no histórico
-  static async criarMovimentacao(
-    data: {
-      equipamentoId: string;
-      origem: string;
-      destino: string;
-      responsavel: string;
-      observacao?: string;
-    },
-    db: Transacao = prisma
-  ) {
-    return db.movimentacao.create({ data });
+  async delete(id: string, tx?: Transacao) {
+    await (tx ?? prisma).equipamento.delete({ where: { id } });
+  }
+
+  count(filtro: EquipamentoFiltro = {}, tx?: Transacao) {
+    return (tx ?? prisma).equipamento.count({ where: filtro });
+  }
+
+  registrarMovimentacao(data: RegistrarMovimentacaoData, tx?: Transacao) {
+    return (tx ?? prisma).movimentacao.create({ data });
   }
 }
+
+export const EquipamentoRepository: EquipamentoRepository = new PrismaEquipamentoRepository();

@@ -51,11 +51,11 @@ export class EquipamentoService {
     return executarEmTransacao(
       async (tx) => {
         const lote = exigirEncontrado(
-          await LoteRepository.findResumoById(data.loteId, tx),
+          await LoteRepository.findById(data.loteId, tx),
           `Lote '${data.loteId}' não encontrado.`
         );
 
-        const posicaoNoLote = (await EquipamentoRepository.countByLoteId(data.loteId, tx)) + 1;
+        const posicaoNoLote = (await EquipamentoRepository.count({ loteId: data.loteId }, tx)) + 1;
 
         const equipamento = await EquipamentoRepository.create(
           {
@@ -68,7 +68,7 @@ export class EquipamentoService {
         );
 
         if (LoteRules.deveIniciarTriagem(lote)) {
-          await LoteRepository.atualizarStatus(data.loteId, StatusLote.EM_TRIAGEM, tx);
+          await LoteRepository.update(data.loteId, { statusProcessamento: StatusLote.EM_TRIAGEM }, tx);
         }
 
         return equipamento;
@@ -99,7 +99,7 @@ export class EquipamentoService {
       // Versão mudou entre a leitura e a escrita: lançar desfaz a transação inteira.
       if (!equipamentoAtualizado) throw new ConflictError(MSG_FALHA_MOVIMENTACAO);
 
-      const movimentacao = await EquipamentoRepository.criarMovimentacao(
+      const movimentacao = await EquipamentoRepository.registrarMovimentacao(
         {
           equipamentoId: params.id,
           origem: params.origem,
@@ -142,7 +142,7 @@ export class EquipamentoService {
     EquipamentoRules.exigirIdentificador(identificador);
 
     return exigirEncontrado(
-      await EquipamentoRepository.findByIdentificador(identificador),
+      await EquipamentoRepository.findDetalheByIdentificador(identificador),
       `Equipamento não encontrado para o identificador "${identificador}".`
     );
   }

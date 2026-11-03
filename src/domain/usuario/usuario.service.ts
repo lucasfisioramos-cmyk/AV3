@@ -94,7 +94,7 @@ export class UsuarioService {
     // sem isso, dois administradores rebaixando um ao outro ao mesmo tempo zerariam os admins.
     return executarEmTransacao(
       async (tx) => {
-        const totalAdmins = await UsuarioRepository.countAdmins(tx);
+        const totalAdmins = await UsuarioRepository.count({ papel: PapelUsuario.ADMINISTRADOR }, tx);
         UsuarioRules.protegerUltimoAdministrador(usuarioAlvo, totalAdmins, 'alterar o perfil do usuário');
         return UsuarioRepository.update(params.idUsuarioAlvo, dadosAtualizacao, tx);
       },
@@ -117,7 +117,7 @@ export class UsuarioService {
     // Transação: SIM (serializável). Mesma invariante da edição: nunca remover o último administrador.
     return executarEmTransacao(
       async (tx) => {
-        const totalAdmins = await UsuarioRepository.countAdmins(tx);
+        const totalAdmins = await UsuarioRepository.count({ papel: PapelUsuario.ADMINISTRADOR }, tx);
         UsuarioRules.protegerUltimoAdministrador(usuarioAlvo, totalAdmins, 'remover o usuário');
         return UsuarioRepository.delete(idUsuarioAlvo, tx);
       },

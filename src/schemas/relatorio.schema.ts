@@ -12,7 +12,7 @@ export const dashboardResponseSchema = envelope(
     equipamentosPorStatus: z.array(
       z.object({
         statusRastreamento: statusRastreamentoSchema,
-        _count: z.object({ id: z.number().int() }),
+        total: z.number().int(),
       })
     ),
   })

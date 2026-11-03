@@ -15,13 +15,13 @@ export class AuthService {
   static async autenticar(usuario?: string, senha?: string): Promise<UsuarioAutenticado> {
     AuthRules.exigirCredenciaisPreenchidas(usuario, senha);
 
-    const credencial = await UsuarioRepository.findByUsuario(usuario!);
+    const credencial = await UsuarioRepository.findCredencialByUsuario(usuario!);
     if (!credencial) throw AuthRules.credenciaisInvalidas();
 
     const senhaValida = await PasswordHasher.comparePassword(senha!, credencial.hashSenha);
     if (!senhaValida) throw AuthRules.credenciaisInvalidas();
 
-    await UsuarioRepository.updateUltimoAcesso(credencial.id);
+    await UsuarioRepository.update(credencial.id, { ultimoAcesso: new Date() });
 
     return { id: credencial.id, usuario: credencial.usuario, papel: credencial.papel };
   }

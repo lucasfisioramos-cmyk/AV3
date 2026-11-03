@@ -28,6 +28,7 @@ export class OrganizacaoService {
     const cnpjExistente = await OrganizacaoRepository.findByCnpj(cnpj);
     OrganizacaoRules.garantirCnpjDisponivel(data.cnpj, cnpjExistente);
 
-    return OrganizacaoRepository.create({ ...data, cnpj });
+    // Telefone é opcional na API, mas obrigatório na tabela: ausência é gravada como texto vazio.
+    return OrganizacaoRepository.create({ ...data, cnpj, telefone: data.telefone ?? '' });
   }
 }

@@ -1,4 +1,5 @@
 import { RelatorioRepository } from '../../repositories/relatorio.repository.js';
+import { LoteRepository } from '../../repositories/lote.repository.js';
 import { OrganizacaoRepository } from '../../repositories/organizacao.repository.js';
 import { exigirEncontrado } from '../shared/guards.js';
 
@@ -7,16 +8,16 @@ import { exigirEncontrado } from '../shared/guards.js';
 export class RelatorioService {
   static async obterDashboardGeral() {
     const [equipamentosPorStatus, metricasGerais, totalLotes] = await Promise.all([
-      RelatorioRepository.countEquipamentosPorStatus(),
-      RelatorioRepository.aggregateMetricasGerais(),
-      RelatorioRepository.countTotalLotes(),
+      RelatorioRepository.contarEquipamentosPorStatus(),
+      RelatorioRepository.obterMetricasGerais(),
+      LoteRepository.count(),
     ]);
 
     return {
       resumoGeral: {
         totalLotes,
-        totalEquipamentos: metricasGerais._count.id,
-        pesoTotalKg: metricasGerais._sum.pesoQuilogramas || 0,
+        totalEquipamentos: metricasGerais.totalEquipamentos,
+        pesoTotalKg: metricasGerais.pesoTotalKg,
       },
       equipamentosPorStatus,
     };
@@ -28,7 +29,7 @@ export class RelatorioService {
       'Organização não encontrada.'
     );
 
-    const metricas = await RelatorioRepository.aggregateMetricasPorOrganizacao(organizacaoId);
+    const metricas = await RelatorioRepository.obterMetricasPorOrganizacao(organizacaoId);
 
     return {
       organizacao: {
@@ -36,10 +37,7 @@ export class RelatorioService {
         razaoSocial: organizacao.razaoSocial,
         cnpj: organizacao.cnpj,
       },
-      metricas: {
-        totalEquipamentos: metricas._count.id,
-        pesoTotalKg: metricas._sum.pesoQuilogramas || 0,
-      },
+      metricas,
     };
   }
 }
