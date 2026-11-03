@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { RelatorioService } from '../services/relatorio.service.js';
+import { RelatorioService } from '../domain/relatorio/relatorio.service.js';
 import { sendSuccess } from '../http/response.js';
 import type { IdParams } from '../schemas/common.schema.js';
 

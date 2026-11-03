@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { UsuarioService } from '../services/usuario.service.js';
+import { AuthService } from '../domain/auth/auth.service.js';
 import { sendSuccess } from '../http/response.js';
 import type { LoginRoute } from '../schemas/auth.schema.js';
 import type { JwtClaims } from '../types/auth.js';
@@ -8,7 +8,7 @@ export class AuthController {
   static async login(request: FastifyRequest<LoginRoute>, reply: FastifyReply) {
     const { usuario, senha } = request.body;
 
-    const credencial = await UsuarioService.autenticar(usuario, senha);
+    const credencial = await AuthService.autenticar(usuario, senha);
 
     // Gerar token JWT Stateless via Fastify
     const token = request.server.jwt.sign(

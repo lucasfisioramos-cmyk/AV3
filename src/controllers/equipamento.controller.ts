@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { EquipamentoService } from '../services/equipamento.service.js';
+import { EquipamentoService } from '../domain/equipamento/equipamento.service.js';
 import { sendCreated, sendSuccess } from '../http/response.js';
 import type {
   AlterarEstadoFisicoRoute,

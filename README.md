@@ -12,7 +12,7 @@ O projeto segue o padrão **Controller-Service-Repository (CSR)**:
 
 * **Routes (`src/routes`)**: Definição declarativa dos endpoints HTTP com suporte a autenticação stateless JWT e controle de acesso baseado em papéis (**RBAC**).
 * **Controllers (`src/controllers`)**: Manipulação de requisições e respostas HTTP.
-* **Services (`src/services`)**: Camada de domínio contendo as regras e travas de negócio (validação de CNPJ, concorrência otimista, janela temporal de lotes, transições de estado físico e proteção do único administrador).
+* **Domínio (`src/domain/<módulo>`)**: um módulo por contexto (`usuario`, `auth`, `organizacao`, `lote`, `equipamento`, `relatorio`). Cada um tem um `*.service.ts` (orquestra: carrega dados, aplica regras, persiste) e um `*.rules.ts` (as regras de negócio, em funções explícitas e nomeadas). Veja a seção abaixo.
 * **Repositories (`src/repositories`)**: Abstração da camada de persistência com chamadas otimizadas do **Prisma Client**.
 
 ---
@@ -136,6 +136,49 @@ docker exec -it greencode-app npx prisma migrate deploy
 docker exec -it greencode-app npx tsx prisma/seed.ts
 ```
 
+
+## Camada de Domínio
+
+```
+src/domain/
+├── validators/      # validações reutilizáveis e puras (CNPJ, senha, data de entrada, papel, e-mail)
+├── shared/          # helpers comuns (exigirEncontrado, exigirValido)
+├── usuario/         # usuario.service.ts + usuario.rules.ts
+├── auth/            # auth.service.ts + auth.rules.ts
+├── organizacao/     # organizacao.service.ts + organizacao.rules.ts
+├── lote/            # lote.service.ts + lote.rules.ts
+├── equipamento/     # equipamento.service.ts + equipamento.rules.ts + equipamento.codigo.ts
+└── relatorio/       # relatorio.service.ts
+```
+
+**Convenção**
+
+| Onde | O que contém | Regras de ouro |
+| --- | --- | --- |
+| `validators/` | Funções `validarX(valor)` que retornam `{ valido: true }` ou `{ valido: false, mensagem }` | Puras: sem banco, sem relógio global (a data atual é parâmetro) e sem lançar erro |
+| `<módulo>.rules.ts` | Regras de negócio (`exigirX`, `garantirX`, `protegerX`) | Recebem os dados já carregados e lançam erros tipados quando a regra é violada |
+| `<módulo>.service.ts` | Orquestração do caso de uso | Busca dados, chama as regras, persiste. Decide e documenta se usa transação |
+| `repositories/` | Acesso ao Prisma | Sem regra de negócio e sem decidir transações |
+
+Erros de domínio (em `src/errors`): `RegraDeNegocioError` (400), `NotFoundError` (404), `ConflictError` (409), `UnauthorizedError` (401) e `ForbiddenError` (403). O handler global os converte em resposta HTTP.
+
+### Padrão de transações
+
+O **service** decide, de forma explícita, e registra a decisão em um comentário `Transação: SIM/NÃO` com o motivo. Usa-se `executarEmTransacao` (`src/persistence/transaction.ts`) quando há:
+
+1. mais de uma escrita que precisa ser atômica (ex.: cadastrar equipamento e atualizar o status do lote);
+2. sequência "ler → decidir → gravar" que a concorrência poderia invalidar (ex.: contar administradores antes de rebaixar um deles). Nesses casos usa-se `isolamento: 'serializavel'`; um conflito vira `409` e o cliente pode repetir a operação.
+
+Não se usa transação em escrita única ou quando o banco já garante a invariante (constraint `unique`, *optimistic locking* por `version`). Os repositórios recebem o cliente da transação como último parâmetro (`db`, padrão `prisma`).
+
+| Operação | Transação | Motivo |
+| --- | --- | --- |
+| Cadastrar equipamento | Sim (serializável) | Posição/código sequencial + status do lote |
+| Movimentar equipamento | Sim | Status + histórico atômicos |
+| Rebaixar/remover administrador | Sim (serializável) | Nunca ficar sem administradores |
+| Alterar estado físico | Não | Escrita única com `version` |
+| Criar usuário, organização, lote | Não | Escrita única (unicidade na constraint) |
+| Relatórios | Não | Somente leitura |
 
 ## Contrato da API
 

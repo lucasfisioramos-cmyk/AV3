@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { UsuarioService } from '../services/usuario.service.js';
+import { UsuarioService } from '../domain/usuario/usuario.service.js';
 import { sendCreated, sendSuccess } from '../http/response.js';
 import type {
   AlterarMinhaSenhaRoute,

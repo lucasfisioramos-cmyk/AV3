@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { OrganizacaoService } from '../services/organizacao.service.js';
+import { OrganizacaoService } from '../domain/organizacao/organizacao.service.js';
 import { sendCreated, sendList } from '../http/response.js';
 import type { CriarOrganizacaoRoute } from '../schemas/organizacao.schema.js';
 

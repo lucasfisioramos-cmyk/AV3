@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { LoteService } from '../services/lote.service.js';
+import { LoteService } from '../domain/lote/lote.service.js';
 import { sendCreated, sendList, sendSuccess } from '../http/response.js';
 import type { BuscarLoteRoute, CriarLoteRoute } from '../schemas/lote.schema.js';
 
