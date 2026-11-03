@@ -22,3 +22,24 @@ export class ForbiddenError extends AppError {
     super(message, 403);
   }
 }
+
+/** 400 - violação de regra de negócio (a requisição é válida, mas a regra não permite). */
+export class RegraDeNegocioError extends AppError {
+  constructor(message: string) {
+    super(message, 400);
+  }
+}
+
+/** 404 - recurso inexistente. */
+export class NotFoundError extends AppError {
+  constructor(message: string) {
+    super(message, 404);
+  }
+}
+
+/** 409 - conflito com o estado atual (duplicidade, concorrência otimista). */
+export class ConflictError extends AppError {
+  constructor(message: string) {
+    super(message, 409);
+  }
+}
