@@ -2,11 +2,10 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './prisma.js';
 
 /**
- * Cliente de banco aceito pelos repositórios: o `prisma` global ou o cliente
- * de uma transação em andamento. Repositórios recebem `db` como último parâmetro
- * (padrão: prisma) e NÃO decidem sobre transações.
+ * Handle opaco de uma transação em andamento. Serviços apenas o repassam aos
+ * repositórios (`tx`); quem o interpreta é a camada de persistência.
  */
-export type DbClient = Prisma.TransactionClient;
+export type Transacao = Prisma.TransactionClient;
 
 export interface OpcoesTransacao {
   /**
@@ -27,7 +26,7 @@ export interface OpcoesTransacao {
  * a invariante (constraint unique, optimistic locking por `version`).
  */
 export function executarEmTransacao<T>(
-  operacao: (tx: DbClient) => Promise<T>,
+  operacao: (tx: Transacao) => Promise<T>,
   opcoes: OpcoesTransacao = {}
 ): Promise<T> {
   return prisma.$transaction(operacao, {

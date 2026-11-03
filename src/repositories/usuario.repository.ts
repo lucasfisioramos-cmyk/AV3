@@ -1,6 +1,6 @@
 import { PapelUsuario, Usuario } from '@prisma/client';
 import { prisma } from '../persistence/prisma.js';
-import type { DbClient } from '../persistence/transaction.js';
+import type { Transacao } from '../persistence/transaction.js';
 
 export class UsuarioRepository {
   static async findById(id: string): Promise<Usuario | null> {
@@ -11,7 +11,7 @@ export class UsuarioRepository {
     return prisma.usuario.findUnique({ where: { usuario } });
   }
 
-  static async countAdmins(db: DbClient = prisma): Promise<number> {
+  static async countAdmins(db: Transacao = prisma): Promise<number> {
     return db.usuario.count({
       where: { papel: PapelUsuario.ADMINISTRADOR },
     });
@@ -37,7 +37,7 @@ export class UsuarioRepository {
       salt?: string;
       papel?: PapelUsuario;
     },
-    db: DbClient = prisma
+    db: Transacao = prisma
   ) {
     return db.usuario.update({
       where: { id },
@@ -53,7 +53,7 @@ export class UsuarioRepository {
     });
   }
 
-  static async delete(id: string, db: DbClient = prisma) {
+  static async delete(id: string, db: Transacao = prisma) {
     return db.usuario.delete({ where: { id } });
   }
 }

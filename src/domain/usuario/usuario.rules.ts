@@ -1,4 +1,4 @@
-import { PapelUsuario } from '@prisma/client';
+import { PapelUsuario } from '../shared/enums.js';
 import { ConflictError, ForbiddenError, RegraDeNegocioError } from '../../errors/app-error.js';
 import { exigirValido } from '../shared/guards.js';
 import { validarPapel, validarSenha } from '../validators/index.js';

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EstadoFisico, PapelUsuario, StatusLote, StatusRastreamento, TipoEquipamento } from '@prisma/client';
+import { EstadoFisico, PapelUsuario, StatusLote, StatusRastreamento, TipoEquipamento } from '../domain/shared/enums.js';
 import { dateTimeSchema } from './common.schema.js';
 
 export const papelUsuarioSchema = z.enum(PapelUsuario);

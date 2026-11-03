@@ -1,4 +1,4 @@
-import { EstadoFisico, StatusRastreamento } from '@prisma/client';
+import { EstadoFisico, StatusRastreamento } from '../shared/enums.js';
 import { ConflictError, RegraDeNegocioError } from '../../errors/app-error.js';
 
 // Hierarquia do estado físico (quanto maior, melhor). Base da regra de rebaixamento.

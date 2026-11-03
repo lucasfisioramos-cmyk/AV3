@@ -1,4 +1,4 @@
-import type { PapelUsuario } from '@prisma/client';
+import type { PapelUsuario } from '../domain/shared/enums.js';
 
 /**
  * Claims explícitos do JWT emitido no login.

@@ -1,5 +1,5 @@
 import type { FastifyRequest } from 'fastify';
-import { PapelUsuario } from '@prisma/client';
+import { PapelUsuario } from '../domain/shared/enums.js';
 import { ForbiddenError } from '../errors/app-error.js';
 
 const { ADMINISTRADOR, OPERADOR_CADASTRO, GESTOR_ALMOXARIFADO, AUDITOR } = PapelUsuario;

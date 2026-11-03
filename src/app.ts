@@ -10,6 +10,7 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import './config/zod.js';
+import { desconectarBanco } from './persistence/prisma.js';
 import { authenticate } from './security/authenticate.js';
 import { errorHandler } from './errors/error-handler.js';
 import { usuarioRoutes } from './routes/usuario.js';
@@ -23,6 +24,11 @@ export const app = Fastify({
 // Validação de entrada e serialização de saída via schemas Zod
 app.setValidatorCompiler(validatorCompiler);
 app.setSerializerCompiler(serializerCompiler);
+
+// Libera as conexões do banco ao encerrar o servidor
+app.addHook('onClose', async () => {
+  await desconectarBanco();
+});
 
 // Registrar o plugin JWT
 app.register(fastifyJwt, {

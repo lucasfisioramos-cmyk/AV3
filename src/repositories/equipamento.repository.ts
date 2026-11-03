@@ -1,6 +1,6 @@
 import { Equipamento, StatusRastreamento, EstadoFisico, TipoEquipamento } from '@prisma/client';
 import { prisma } from '../persistence/prisma.js';
-import type { DbClient } from '../persistence/transaction.js';
+import type { Transacao } from '../persistence/transaction.js';
 
 /**
  * Persistência pura de equipamentos e movimentações.
@@ -8,12 +8,12 @@ import type { DbClient } from '../persistence/transaction.js';
  */
 export class EquipamentoRepository {
   // 1. Buscar Equipamento por ID
-  static async findById(id: string, db: DbClient = prisma): Promise<Equipamento | null> {
+  static async findById(id: string, db: Transacao = prisma): Promise<Equipamento | null> {
     return db.equipamento.findUnique({ where: { id } });
   }
 
   // 2. Contar quantidade de equipamentos vinculados a um Lote (sequência do código de barras)
-  static async countByLoteId(loteId: string, db: DbClient = prisma): Promise<number> {
+  static async countByLoteId(loteId: string, db: Transacao = prisma): Promise<number> {
     return db.equipamento.count({ where: { loteId } });
   }
 
@@ -44,7 +44,7 @@ export class EquipamentoRepository {
       posicaoNoLote: number;
       statusRastreamento: StatusRastreamento;
     },
-    db: DbClient = prisma
+    db: Transacao = prisma
   ) {
     return db.equipamento.create({ data });
   }
@@ -57,7 +57,7 @@ export class EquipamentoRepository {
     id: string,
     versaoAtual: number,
     data: { statusRastreamento?: StatusRastreamento; estadoFisico?: EstadoFisico },
-    db: DbClient = prisma
+    db: Transacao = prisma
   ): Promise<Equipamento | null> {
     const { count } = await db.equipamento.updateMany({
       where: { id, version: versaoAtual },
@@ -77,7 +77,7 @@ export class EquipamentoRepository {
       responsavel: string;
       observacao?: string;
     },
-    db: DbClient = prisma
+    db: Transacao = prisma
   ) {
     return db.movimentacao.create({ data });
   }

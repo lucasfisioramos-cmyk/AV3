@@ -1,4 +1,4 @@
-import { StatusRastreamento, EstadoFisico, StatusLote, TipoEquipamento } from '@prisma/client';
+import { StatusRastreamento, EstadoFisico, StatusLote, TipoEquipamento } from '../shared/enums.js';
 import { EquipamentoRepository } from '../../repositories/equipamento.repository.js';
 import { LoteRepository } from '../../repositories/lote.repository.js';
 import { executarEmTransacao } from '../../persistence/transaction.js';

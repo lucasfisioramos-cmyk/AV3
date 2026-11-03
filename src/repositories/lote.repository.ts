@@ -1,6 +1,6 @@
 import { StatusLote } from '@prisma/client';
 import { prisma } from '../persistence/prisma.js';
-import type { DbClient } from '../persistence/transaction.js';
+import type { Transacao } from '../persistence/transaction.js';
 
 export class LoteRepository {
   static async findAll() {
@@ -21,11 +21,11 @@ export class LoteRepository {
   }
 
   /** Lote sem relacionamentos (leve), para checagens de regra de negócio. */
-  static async findResumoById(id: string, db: DbClient = prisma) {
+  static async findResumoById(id: string, db: Transacao = prisma) {
     return db.lote.findUnique({ where: { id } });
   }
 
-  static async atualizarStatus(id: string, statusProcessamento: StatusLote, db: DbClient = prisma) {
+  static async atualizarStatus(id: string, statusProcessamento: StatusLote, db: Transacao = prisma) {
     return db.lote.update({ where: { id }, data: { statusProcessamento } });
   }
 

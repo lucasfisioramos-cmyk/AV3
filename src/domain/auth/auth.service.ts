@@ -1,4 +1,4 @@
-import type { PapelUsuario } from '@prisma/client';
+import type { PapelUsuario } from '../shared/enums.js';
 import { UsuarioRepository } from '../../repositories/usuario.repository.js';
 import { PasswordHasher } from '../../security/hasher.js';
 import { AuthRules } from './auth.rules.js';

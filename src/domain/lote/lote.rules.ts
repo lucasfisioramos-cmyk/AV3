@@ -1,4 +1,4 @@
-import { StatusLote } from '@prisma/client';
+import { StatusLote } from '../shared/enums.js';
 import { ConflictError } from '../../errors/app-error.js';
 import { exigirValido } from '../shared/guards.js';
 import { validarDataEntrada } from '../validators/index.js';

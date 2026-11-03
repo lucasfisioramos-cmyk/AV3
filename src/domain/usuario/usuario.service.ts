@@ -1,4 +1,4 @@
-import { PapelUsuario } from '@prisma/client';
+import { PapelUsuario } from '../shared/enums.js';
 import { UsuarioRepository } from '../../repositories/usuario.repository.js';
 import { PasswordHasher } from '../../security/hasher.js';
 import { executarEmTransacao } from '../../persistence/transaction.js';

@@ -1,5 +1,5 @@
 import type { FastifyRequest } from 'fastify';
-import { PapelUsuario } from '@prisma/client';
+import { PapelUsuario } from '../domain/shared/enums.js';
 import { UnauthorizedError } from '../errors/app-error.js';
 
 const PAPEIS_VALIDOS: readonly string[] = Object.values(PapelUsuario);

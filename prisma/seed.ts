@@ -1,7 +1,8 @@
-import { PrismaClient, PapelUsuario } from '@prisma/client';
+import { PapelUsuario } from '@prisma/client';
+import { createPrismaClient } from '../src/persistence/client.js';
 import bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main() {
   const usuarioAdmin = 'admin';

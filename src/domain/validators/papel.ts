@@ -1,4 +1,4 @@
-import { PapelUsuario } from '@prisma/client';
+import { PapelUsuario } from '../shared/enums.js';
 import { invalido, valido, type ResultadoValidacao } from './resultado.js';
 
 const PAPEIS: readonly string[] = Object.values(PapelUsuario);

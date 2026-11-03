@@ -1,4 +1,4 @@
-import type { TipoEquipamento } from '@prisma/client';
+import type { TipoEquipamento } from '../shared/enums.js';
 
 /** Código de barras interno: GC-<4 primeiros chars do lote>-<3 letras do tipo>-<posição com 3 dígitos>. */
 export function gerarCodigoBarrasInterno(loteId: string, tipo: TipoEquipamento, posicaoNoLote: number): string {
