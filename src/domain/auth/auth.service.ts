@@ -16,12 +16,21 @@ export class AuthService {
     AuthRules.exigirCredenciaisPreenchidas(usuario, senha);
 
     const credencial = await UsuarioRepository.findCredencialByUsuario(usuario!);
-    if (!credencial) throw AuthRules.credenciaisInvalidas();
+    if (!credencial) {
+      await PasswordHasher.simularComparacao(senha!); // mesmo tempo de resposta de uma senha errada
+      throw AuthRules.credenciaisInvalidas();
+    }
 
     const senhaValida = await PasswordHasher.comparePassword(senha!, credencial.hashSenha);
     if (!senhaValida) throw AuthRules.credenciaisInvalidas();
 
-    await UsuarioRepository.update(credencial.id, { ultimoAcesso: new Date() });
+    // Atualização transparente: hashes gerados com custo antigo são regravados com o custo atual.
+    await UsuarioRepository.update(credencial.id, {
+      ultimoAcesso: new Date(),
+      ...(PasswordHasher.precisaRehash(credencial.hashSenha)
+        ? { hashSenha: await PasswordHasher.hashPassword(senha!) }
+        : {}),
+    });
 
     return { id: credencial.id, usuario: credencial.usuario, papel: credencial.papel };
   }

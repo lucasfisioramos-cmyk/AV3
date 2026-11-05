@@ -11,7 +11,7 @@ import type {
  * assim o domínio não depende do Prisma e dados sensíveis nunca fazem parte destes tipos.
  */
 
-/** Usuário SEM dados de credencial (hashSenha/salt nunca saem do repositório por padrão). */
+/** Usuário SEM dados de credencial (hashSenha nunca sai do repositório por padrão). */
 export interface Usuario {
   id: string;
   usuario: string;

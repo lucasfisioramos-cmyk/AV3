@@ -1,27 +1,40 @@
+import 'dotenv/config';
 import { PapelUsuario } from '@prisma/client';
 import { createPrismaClient } from '../src/persistence/client.js';
-import bcrypt from 'bcrypt';
+import { PasswordHasher } from '../src/security/hasher.js';
+import { validarSenha } from '../src/domain/validators/senha.js';
 
 const prisma = createPrismaClient();
 
+const SENHA_PADRAO_DESENVOLVIMENTO = 'Greencode#Dev2026';
+
+function obterSenhaDoAdmin(): string {
+  const informada = process.env.SEED_ADMIN_PASSWORD;
+  if (informada) return informada;
+
+  // A senha padrão é pública (está no código): só é aceita fora de produção.
+  if (['development', 'test'].includes(process.env.NODE_ENV ?? '')) return SENHA_PADRAO_DESENVOLVIMENTO;
+
+  throw new Error(
+    'Defina SEED_ADMIN_PASSWORD para executar o seed (a senha padrão só é usada com NODE_ENV=development ou test).'
+  );
+}
+
 async function main() {
   const usuarioAdmin = 'admin';
-  const senhaPlana = 'Admin123!';
+  const senhaPlana = obterSenhaDoAdmin();
 
-  // Gerar hash e salt idênticos ao ambiente de execução
-  const salt = await bcrypt.genSalt(10);
-  const hashSenha = await bcrypt.hash(senhaPlana, salt);
+  const validacao = validarSenha(senhaPlana, { usuario: usuarioAdmin });
+  if (!validacao.valido) throw new Error(`SEED_ADMIN_PASSWORD inválida: ${validacao.mensagem}`);
 
-  const admin = await prisma.usuario.upsert({
+  const hashSenha = await PasswordHasher.hashPassword(senhaPlana);
+
+  await prisma.usuario.upsert({
     where: { usuario: usuarioAdmin },
-    update: {
-      hashSenha,
-      salt,
-    },
+    update: { hashSenha },
     create: {
       usuario: usuarioAdmin,
       hashSenha,
-      salt,
       papel: PapelUsuario.ADMINISTRADOR,
     },
   });
@@ -34,7 +47,7 @@ main()
     await prisma.$disconnect();
   })
   .catch(async (e) => {
-    console.error('❌ Erro no seed:', e);
+    console.error('❌ Erro no seed:', e instanceof Error ? e.message : e);
     await prisma.$disconnect();
     process.exit(1);
   });

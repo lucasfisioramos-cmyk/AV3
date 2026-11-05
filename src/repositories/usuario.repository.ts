@@ -15,14 +15,12 @@ export interface UsuarioCredencial {
 export interface CriarUsuarioData {
   usuario: string;
   hashSenha: string;
-  salt: string;
   papel: PapelUsuario;
 }
 
 export interface AtualizarUsuarioData {
   usuario?: string;
   hashSenha?: string;
-  salt?: string;
   papel?: PapelUsuario;
   ultimoAcesso?: Date;
 }
@@ -37,7 +35,7 @@ export interface UsuarioRepository extends CrudRepository<Usuario, CriarUsuarioD
   findCredencialByUsuario(usuario: string, tx?: Transacao): Promise<UsuarioCredencial | null>;
 }
 
-// Campos devolvidos por padrão: sem hashSenha nem salt.
+// Campos devolvidos por padrão: sem hashSenha.
 const SELECT_PUBLICO = {
   id: true,
   usuario: true,

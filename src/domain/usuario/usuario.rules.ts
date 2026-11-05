@@ -1,7 +1,7 @@
 import { PapelUsuario } from '../shared/enums.js';
 import { ConflictError, ForbiddenError, RegraDeNegocioError } from '../../errors/app-error.js';
 import { exigirValido } from '../shared/guards.js';
-import { validarPapel, validarSenha } from '../validators/index.js';
+import { validarPapel, validarSenha, type ContextoSenha } from '../validators/index.js';
 
 /** Regras de negócio de usuário. Funções puras: recebem os dados já carregados. */
 export const UsuarioRules = {
@@ -9,8 +9,8 @@ export const UsuarioRules = {
     exigirValido(validarPapel(papel));
   },
 
-  exigirSenhaValida(senha: string): void {
-    exigirValido(validarSenha(senha));
+  exigirSenhaValida(senha: string, contexto: ContextoSenha = {}): void {
+    exigirValido(validarSenha(senha, contexto));
   },
 
   garantirUsuarioInedito(usuario: string, existente: unknown): void {

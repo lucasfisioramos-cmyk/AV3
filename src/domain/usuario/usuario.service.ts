@@ -25,17 +25,16 @@ export class UsuarioService {
   // (violação -> P2002 -> 409 no handler global).
   static async criarUsuario(data: CriarUsuarioInput) {
     UsuarioRules.exigirPapelValido(data.papel);
-    UsuarioRules.exigirSenhaValida(data.senhaPlana);
+    UsuarioRules.exigirSenhaValida(data.senhaPlana, { usuario: data.usuario });
 
     const usuarioExistente = await UsuarioRepository.findByUsuario(data.usuario);
     UsuarioRules.garantirUsuarioInedito(data.usuario, usuarioExistente);
 
-    const { hash, salt } = await PasswordHasher.hashPassword(data.senhaPlana);
+    const hashSenha = await PasswordHasher.hashPassword(data.senhaPlana);
 
     return UsuarioRepository.create({
       usuario: data.usuario,
-      hashSenha: hash,
-      salt,
+      hashSenha,
       papel: data.papel,
     });
   }
@@ -57,7 +56,6 @@ export class UsuarioService {
     const dadosAtualizacao: {
       usuario?: string;
       hashSenha?: string;
-      salt?: string;
       papel?: PapelUsuario;
     } = {};
     let rebaixaAdministrador = false;
@@ -77,10 +75,9 @@ export class UsuarioService {
     }
 
     if (params.novaSenha && params.novaSenha.trim().length > 0) {
-      UsuarioRules.exigirSenhaValida(params.novaSenha);
-      const { hash, salt } = await PasswordHasher.hashPassword(params.novaSenha);
-      dadosAtualizacao.hashSenha = hash;
-      dadosAtualizacao.salt = salt;
+      // A senha não pode conter o nome de usuário que ficará valendo após a edição.
+      UsuarioRules.exigirSenhaValida(params.novaSenha, { usuario: dadosAtualizacao.usuario ?? usuarioAlvo.usuario });
+      dadosAtualizacao.hashSenha = await PasswordHasher.hashPassword(params.novaSenha);
     }
 
     UsuarioRules.exigirAlgumaAlteracao(dadosAtualizacao);
