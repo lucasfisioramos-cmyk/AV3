@@ -71,22 +71,7 @@ model Usuario {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  sessoes      Sessao[]
-
   @@map("usuarios")
-}
-
-model Sessao {
-  id           String   @id @default(uuid())
-  token        String   @unique
-  usuarioId    String
-  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  papel        PapelUsuario
-  criacao      DateTime @default(now())
-  ultimoAcesso DateTime @updatedAt
-  ativa        Boolean  @default(true)
-
-  @@map("sessoes")
 }
 
 model Organizacao {
