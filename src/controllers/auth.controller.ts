@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { AuthService } from '../domain/auth/auth.service.js';
 import { sendSuccess } from '../http/response.js';
@@ -16,8 +17,9 @@ export class AuthController {
         sub: credencial.id,
         usuario: credencial.usuario,
         papel: credencial.papel,
-      } satisfies JwtClaims,
-      { expiresIn: '8h' }
+        jti: randomUUID(),
+      } satisfies JwtClaims
+      // iss, aud, exp e algoritmo vêm da configuração central (src/security/jwt.ts)
     );
 
     return sendSuccess(

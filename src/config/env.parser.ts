@@ -7,6 +7,10 @@ export interface Env {
   HOST: string;
   DATABASE_URL: string;
   JWT_SECRET: string;
+  /** Validade do token (ex.: 15m, 8h, 1d). */
+  JWT_EXPIRES_IN: string;
+  JWT_ISSUER: string;
+  JWT_AUDIENCE: string;
 }
 
 export class EnvValidationError extends Error {
@@ -20,6 +24,7 @@ export class EnvValidationError extends Error {
 }
 
 const JWT_SECRET_MIN_LENGTH_PRODUCTION = 32;
+const JWT_EXPIRES_IN_FORMATO = /^[1-9]\d*[smhd]$/;
 
 function isBlank(value: string | undefined): value is undefined {
   return value === undefined || value.trim() === '';
@@ -60,6 +65,14 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     issues.push(`JWT_SECRET deve ter no mínimo ${JWT_SECRET_MIN_LENGTH_PRODUCTION} caracteres em produção.`);
   }
 
+  // JWT_EXPIRES_IN / JWT_ISSUER / JWT_AUDIENCE (opcionais, com padrões seguros)
+  const jwtExpiresIn = isBlank(source.JWT_EXPIRES_IN) ? '8h' : source.JWT_EXPIRES_IN!.trim();
+  if (!JWT_EXPIRES_IN_FORMATO.test(jwtExpiresIn)) {
+    issues.push(`JWT_EXPIRES_IN "${jwtExpiresIn}" é inválida. Use número + unidade (s, m, h, d), ex.: 15m, 8h, 1d.`);
+  }
+  const jwtIssuer = isBlank(source.JWT_ISSUER) ? 'greencode-api' : source.JWT_ISSUER!.trim();
+  const jwtAudience = isBlank(source.JWT_AUDIENCE) ? 'greencode-clients' : source.JWT_AUDIENCE!.trim();
+
   // PORT (opcional, padrão 3000)
   let port = 3000;
   const portRaw = source.PORT?.trim();
@@ -85,5 +98,8 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     HOST: host,
     DATABASE_URL: databaseUrl!,
     JWT_SECRET: jwtSecret!,
+    JWT_EXPIRES_IN: jwtExpiresIn,
+    JWT_ISSUER: jwtIssuer,
+    JWT_AUDIENCE: jwtAudience,
   };
 }

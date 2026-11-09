@@ -9,11 +9,15 @@ export interface JwtClaims {
   sub: string;
   usuario: string;
   papel: PapelUsuario;
+  /** Identificador único do token (rastreabilidade em logs e base para revogação futura). */
+  jti?: string;
 }
 
 /** Usuário autenticado disponível em `request.user` após `jwtVerify()`. */
 export interface AuthenticatedUser extends JwtClaims {
-  /** Preenchidos pelo @fastify/jwt na emissão/verificação. */
+  /** Claims registrados, preenchidos na emissão pelo plugin (validados na verificação). */
   iat?: number;
   exp?: number;
+  iss?: string;
+  aud?: string | string[];
 }

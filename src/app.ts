@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
+import { jwtOptions } from './security/jwt.js';
 import { loteRoutes } from './routes/lote.js';
 import { equipamentoRoutes } from './routes/equipamento.js';
 import { relatorioRoutes } from './routes/relatorio.js';
@@ -35,9 +36,7 @@ app.addHook('onClose', async () => {
 });
 
 // Registrar o plugin JWT
-app.register(fastifyJwt, {
-  secret: env.JWT_SECRET,
-});
+app.register(fastifyJwt, jwtOptions);
 
 // Decorador de autenticação JWT (implementação em src/security/authenticate.ts)
 app.decorate('authenticate', authenticate);
