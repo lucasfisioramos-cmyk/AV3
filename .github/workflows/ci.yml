@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  qualidade:
+    name: Qualidade (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # `npm ci` (e não `npm install`): instala exatamente o package-lock.json, de forma reprodutível.
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar o Prisma Client
+        run: npm run db:generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      - name: Checagem de tipos (código)
+        run: npx tsc --noEmit
+
+      - name: Checagem de tipos (testes)
+        run: npm run typecheck:tests
+
+      - name: Fronteira de arquitetura (Prisma só na camada de persistência)
+        run: npm run check:arquitetura
+
+      - name: Testes com cobertura mínima
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      - name: Publicar relatório de cobertura
+        if: matrix.node == 22 && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura
+          path: coverage/lcov.info
+          if-no-files-found: ignore
