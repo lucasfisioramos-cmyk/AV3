@@ -111,6 +111,10 @@ Em ambientes de produção/CI, aplique as migrações com `npm run db:migrate:de
 | `npm run build` | Compila o TypeScript |
 | `npm run start` | Inicia o servidor compilado (produção) |
 | `npm run typecheck` | Verifica tipos sem emitir arquivos |
+| `npm test` | Executa a suíte de testes (Vitest) |
+| `npm run test:coverage` | Testes + cobertura com limites mínimos (falha se não atingidos) |
+| `npm run test:watch` | Testes em modo contínuo |
+| `npm run typecheck:tests` | Verifica tipos do código **e** dos testes |
 | `npm run check:arquitetura` | Falha se o Prisma for usado fora da camada de persistência |
 | `npm run setup` | `db:generate` + `db:migrate` + `db:seed` |
 
@@ -291,6 +295,33 @@ Para garantir a estrita conformidade do TypeScript sem emissão de erros:
 ```
 npm run typecheck
 ```
+
+## Testes e Integração Contínua
+
+```
+npm test                # suíte completa
+npm run test:coverage   # com cobertura e limites mínimos
+```
+
+**Não é necessário PostgreSQL para rodar os testes.** Os repositórios e a transação são substituídos por um
+banco em memória (`tests/helpers/fakes.ts`) que implementa os mesmos contratos de `src/repositories`;
+serviços, regras, rotas, validação, JWT e tratamento de erros rodam de verdade (via `app.inject`).
+
+| Tipo | Local | O que cobre |
+| --- | --- | --- |
+| Unitários | `tests/unit` | Validadores (CNPJ, senha, data de entrada, papel, e-mail), hash de senha, regras de lote/organização/usuário/equipamento, serviços, mapeamento de erros, `env`, redação de logs |
+| Integração (HTTP) | `tests/integration` | Login, criação de usuário, matriz de autorização papel × rota, JWT forjado/expirado, proteção do último administrador, erros de negócio (400/401/403/404/409/500) |
+
+**Cobertura mínima** (`vitest.config.ts`, aplicada por `npm run test:coverage`): global 80% (ramos 70%) e limites
+mais altos nos módulos críticos: `src/security` e `src/domain/auth` (autenticação/autorização), validadores,
+regras de domínio e serviços de usuário, organização e lote.
+
+**CI** (`.github/workflows/ci.yml`): em todo *pull request* e em *push* para `main`/`master`, com Node 20 e 22:
+`npm ci` → `prisma generate` → `tsc --noEmit` → tipos dos testes → `check:arquitetura` → testes com cobertura → `build`.
+Usa `npm ci` (instala exatamente o `package-lock.json`) em vez de `npm install`, para builds reprodutíveis.
+
+**Limitação conhecida:** como o banco é simulado, comportamentos do PostgreSQL (isolamento serializável,
+constraints reais, migrações) não são exercitados. Um *job* de CI com PostgreSQL real é o próximo passo natural.
 
 ## Compatibilidade
 
