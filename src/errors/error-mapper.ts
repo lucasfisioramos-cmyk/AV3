@@ -99,6 +99,27 @@ function hasNumericStatus(err: unknown): err is { statusCode: number; code?: str
 }
 
 /**
+ * Versão do erro segura para LOG. Erros do Prisma carregam na mensagem o trecho da consulta
+ * (inclusive os valores enviados, como hashes e dados pessoais), então registramos somente
+ * o tipo e o código.
+ */
+export function erroParaLog(error: unknown): Record<string, unknown> {
+  if (error instanceof PrismaClientKnownRequestError) {
+    return { name: error.name, code: error.code };
+  }
+  if (error instanceof PrismaClientInitializationError) {
+    return { name: error.name, code: error.errorCode };
+  }
+  if (error instanceof PrismaClientValidationError) {
+    return { name: error.name };
+  }
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message, ...(error.stack ? { stack: error.stack } : {}) };
+  }
+  return { name: 'UnknownError' };
+}
+
+/**
  * Converte qualquer erro lançado na aplicação em um payload HTTP padronizado.
  * Não vaza detalhes internos (queries, stack, mensagens do Prisma) ao cliente.
  */

@@ -9,8 +9,16 @@ function loadEnv(): Env {
     return parseEnv(process.env);
   } catch (err) {
     if (err instanceof EnvValidationError) {
-      // Falha rápida e legível: sem stack trace, o problema é de configuração.
-      console.error(`❌ ${err.message}\nConsulte o arquivo .env.example.`);
+      // Falha rápida: o logger depende da configuração, então emitimos uma linha JSON
+      // estruturada (mesmo formato do logger) e encerramos, sem stack trace.
+      process.stderr.write(
+        JSON.stringify({
+          level: 'fatal',
+          time: new Date().toISOString(),
+          msg: 'Configuração de ambiente inválida. Consulte o arquivo .env.example.',
+          problemas: err.issues,
+        }) + '\n'
+      );
       process.exit(1);
     }
     throw err;

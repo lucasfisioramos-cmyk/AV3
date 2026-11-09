@@ -43,6 +43,11 @@ cp .env.example .env
 | `JWT_SECRET` | Sim | Segredo de assinatura do JWT. Em produção, mínimo de 32 caracteres. |
 | `PORT` | Não | Porta HTTP (padrão `3000`). |
 | `HOST` | Não | Interface de escuta (padrão `0.0.0.0`). |
+| `JWT_EXPIRES_IN` | Não | Validade do token: número + `s`, `m`, `h` ou `d` (padrão `8h`). |
+| `JWT_ISSUER` | Não | Emissor (`iss`) do token (padrão `greencode-api`). |
+| `JWT_AUDIENCE` | Não | Público (`aud`) do token (padrão `greencode-clients`). |
+| `LOG_LEVEL` | Não | `fatal`, `error`, `warn`, `info`, `debug`, `trace` ou `silent`. Padrão: `info` em produção, `debug` em desenvolvimento e `silent` em teste. |
+| `SEED_ADMIN_PASSWORD` | Só no seed | Senha do admin criado pelo `npm run db:seed`. Obrigatória fora de `development`/`test`. |
 
 A aplicação **não inicia** se alguma variável obrigatória estiver ausente ou inválida.
 
@@ -74,7 +79,7 @@ Ou execute os passos individualmente:
 ```bash
 npm run db:generate   # gera o Prisma Client
 npm run db:migrate    # aplica as migrações (desenvolvimento)
-npm run db:seed       # carga inicial (usuário admin)
+npm run db:seed       # carga inicial (usuário admin; em desenvolvimento a senha é Greencode#Dev2026)
 ```
 
 ### 3. Executar a Aplicação
@@ -209,9 +214,32 @@ Leituras específicas de um caso de uso têm nome próprio (`listarComResumo`, `
 
 **Dados sensíveis**
 
-- `hashSenha` e `salt` nunca são retornados por padrão: todas as operações de `UsuarioRepository` usam `select` explícito.
+- `hashSenha` nunca é retornado por padrão: todas as operações de `UsuarioRepository` usam `select` explícito.
 - O único método que devolve o hash é `findCredencialByUsuario`, usado somente na autenticação.
 - Listagens e detalhes trazem apenas os campos necessários (ex.: a organização de um lote vem como `id`, `razaoSocial` e `cnpj`).
+
+## Segurança e Identidade
+
+### Senhas
+
+- Armazenamos somente o hash do **bcrypt** (custo 12). O bcrypt já embute o salt no próprio hash, por isso não existe coluna de salt. Hashes antigos (custo menor) continuam válidos e são regravados com o custo atual no próximo login.
+- **Política** (ao criar ou alterar senha; não se aplica ao login): mínimo de 8 caracteres, com maiúscula, minúscula, número e símbolo; máximo de 72 bytes; não pode conter o nome de usuário nem ser uma senha comum. A política está em `src/domain/validators/senha.ts`.
+- O login de usuário inexistente executa uma comparação "no vazio" para ter o mesmo tempo de resposta de uma senha errada.
+
+### JWT (autenticação stateless)
+
+A aplicação usa **apenas JWT stateless**; não há sessões em banco (a tabela `sessoes`, que nunca foi usada, foi removida).
+
+- Assinatura HS256 com `JWT_SECRET` (obrigatório; mínimo de 32 caracteres em produção).
+- Claims: `sub`, `usuario`, `papel`, `jti`, `iat`, `exp`, `iss` e `aud`. Um token é rejeitado (401) se a assinatura, o algoritmo, a expiração, o emissor, o público ou qualquer claim obrigatório estiver ausente ou inválido.
+- **Limitação conhecida:** como não há consulta ao banco a cada requisição, um token continua válido até expirar mesmo que o usuário seja removido ou tenha o papel alterado. Mitigue com `JWT_EXPIRES_IN` curto em produção. Se for necessário revogar tokens (logout, bloqueio imediato), o caminho é adotar refresh tokens ou uma lista de revogação por `jti`.
+
+### Logs
+
+- Logger estruturado (pino): JSON em produção e formato legível em desenvolvimento, com nível configurável por `LOG_LEVEL`.
+- Tokens, senhas, cookies, headers e query strings **não** são registrados (serializador de requisição enxuto e `redact` de credenciais).
+- Erros do Prisma são registrados apenas com tipo e código, porque a mensagem original contém os valores da consulta.
+- As consultas SQL do Prisma nunca são logadas.
 
 ## Contrato da API
 

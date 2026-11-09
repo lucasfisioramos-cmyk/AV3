@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
+import { loggerOptions } from './config/logger.js';
 import { jwtOptions } from './security/jwt.js';
 import { loteRoutes } from './routes/lote.js';
 import { equipamentoRoutes } from './routes/equipamento.js';
@@ -19,7 +20,7 @@ import { authRoutes } from './routes/auth.js';
 
 
 export const app = Fastify({
-  logger: true,
+  logger: loggerOptions,
 });
 
 // Validação de entrada e serialização de saída via schemas Zod

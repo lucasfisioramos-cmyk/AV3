@@ -1,6 +1,11 @@
 export const NODE_ENVS = ['development', 'production', 'test'] as const;
 export type NodeEnv = (typeof NODE_ENVS)[number];
 
+export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
+const LOG_LEVEL_PADRAO: Record<NodeEnv, LogLevel> = { production: 'info', development: 'debug', test: 'silent' };
+
 export interface Env {
   NODE_ENV: NodeEnv;
   PORT: number;
@@ -11,6 +16,7 @@ export interface Env {
   JWT_EXPIRES_IN: string;
   JWT_ISSUER: string;
   JWT_AUDIENCE: string;
+  LOG_LEVEL: LogLevel;
 }
 
 export class EnvValidationError extends Error {
@@ -73,6 +79,17 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   const jwtIssuer = isBlank(source.JWT_ISSUER) ? 'greencode-api' : source.JWT_ISSUER!.trim();
   const jwtAudience = isBlank(source.JWT_AUDIENCE) ? 'greencode-clients' : source.JWT_AUDIENCE!.trim();
 
+  // LOG_LEVEL (opcional; padrão depende do ambiente)
+  const logLevelRaw = source.LOG_LEVEL?.trim().toLowerCase();
+  let logLevel: LogLevel = LOG_LEVEL_PADRAO[nodeEnv];
+  if (!isBlank(logLevelRaw)) {
+    if ((LOG_LEVELS as readonly string[]).includes(logLevelRaw)) {
+      logLevel = logLevelRaw as LogLevel;
+    } else {
+      issues.push(`LOG_LEVEL "${logLevelRaw}" é inválido. Use: ${LOG_LEVELS.join(' | ')}.`);
+    }
+  }
+
   // PORT (opcional, padrão 3000)
   let port = 3000;
   const portRaw = source.PORT?.trim();
@@ -101,5 +118,6 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     JWT_EXPIRES_IN: jwtExpiresIn,
     JWT_ISSUER: jwtIssuer,
     JWT_AUDIENCE: jwtAudience,
+    LOG_LEVEL: logLevel,
   };
 }
