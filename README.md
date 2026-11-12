@@ -1,332 +1,158 @@
-# ♻️ Greencode - Sistema de Logística Reversa (API RESTful)
+# ♻️ Greencode API
 
-> **API RESTful robusta desenvolvida para a gestão e rastreabilidade de ativos eletrônicos em processos de logística reversa, triagem e desmonte.**
+API RESTful para gestão e rastreabilidade de ativos eletrônicos em logística reversa: recebimento de lotes, triagem, desmonte e destinação de equipamentos.
 
-Este projeto é a evolução da aplicação CLI para uma arquitetura monolítica moderna em camadas, utilizando **Fastify**, **TypeScript** e **Prisma ORM** com **PostgreSQL**, em conformidade com as diretrizes de avaliação da FATEC.
+Evolução da aplicação CLI da AV1 para um monólito em camadas com **Fastify 5**, **TypeScript**, **Zod**, **Prisma 6** e **PostgreSQL** (projeto acadêmico FATEC).
 
----
+## Índice
 
-## Arquitetura do Sistema
+- [Começando](#começando) · [Variáveis de ambiente](#variáveis-de-ambiente) · [Scripts](#scripts)
+- [Produção e Docker](#produção-e-docker)
+- [Documentação técnica](#documentação-técnica)
+- [Testes e CI](#testes-e-integração-contínua) · [Problemas comuns](#problemas-comuns)
 
-O projeto segue o padrão **Controller-Service-Repository (CSR)**:
+## Começando
 
-* **Routes (`src/routes`)**: Definição declarativa dos endpoints HTTP com suporte a autenticação stateless JWT e controle de acesso baseado em papéis (**RBAC**).
-* **Controllers (`src/controllers`)**: Manipulação de requisições e respostas HTTP.
-* **Domínio (`src/domain/<módulo>`)**: um módulo por contexto (`usuario`, `auth`, `organizacao`, `lote`, `equipamento`, `relatorio`). Cada um tem um `*.service.ts` (orquestra: carrega dados, aplica regras, persiste) e um `*.rules.ts` (as regras de negócio, em funções explícitas e nomeadas). Veja a seção abaixo.
-* **Repositories (`src/repositories`)**: Única camada que conversa com o **Prisma Client**, atrás de interfaces padronizadas (veja "Camada de Persistência").
-
----
-
-## 🛠️ Pré-requisitos
-
-Para executar o projeto localmente, certifique-se de ter instalado:
-
-* **Node.js** (v20.x ou superior)
-* **npm** (v9.x ou superior)
-* **PostgreSQL** (v14 ou superior) em execução e com um banco criado para o projeto
-* **Docker & Docker Compose** *(opcional, para execução isolada em container)*
-
----
-
-## ⚙️ Variáveis de Ambiente
-
-Copie o arquivo `.env.example` para `.env` na raiz do projeto e preencha com os seus dados:
+**Requisitos:** Node.js 20+, npm 9+ e PostgreSQL 14+ rodando, com um banco vazio criado para o projeto.
 
 ```bash
-cp .env.example .env
+git clone <url-do-repositório>
+cd <pasta-do-projeto>
+npm ci                  # instala exatamente o package-lock.json
+cp .env.example .env    # (Windows PowerShell: Copy-Item .env.example .env) e edite DATABASE_URL e JWT_SECRET
+npm run setup           # prisma generate + migrações + seed do administrador
+npm run dev             # http://localhost:3000, com hot-reload
 ```
+
+- Swagger (contrato completo da API): http://localhost:3000/docs
+- Health check: http://localhost:3000/api/v1/health
+- Login inicial: usuário `admin`; em desenvolvimento a senha é `Greencode#Dev2026` (ou a de `SEED_ADMIN_PASSWORD`). **Troque-a** fora do ambiente local.
+
+> Depois de `npm ci`/`npm install`, rode `npm run db:generate` se o Prisma Client não existir (veja [Problemas comuns](#problemas-comuns)).
+
+## Variáveis de ambiente
+
+Copie `.env.example` para `.env`. A aplicação **não inicia** se alguma variável obrigatória estiver ausente ou inválida (todos os problemas são listados de uma vez).
 
 | Variável | Obrigatória | Descrição |
 | --- | --- | --- |
-| `NODE_ENV` | Sim | `development`, `production` ou `test`. |
-| `DATABASE_URL` | Sim | String de conexão PostgreSQL (`postgresql://usuario:senha@host:5432/banco`). |
-| `JWT_SECRET` | Sim | Segredo de assinatura do JWT. Em produção, mínimo de 32 caracteres. |
-| `PORT` | Não | Porta HTTP (padrão `3000`). |
-| `HOST` | Não | Interface de escuta (padrão `0.0.0.0`). |
-| `JWT_EXPIRES_IN` | Não | Validade do token: número + `s`, `m`, `h` ou `d` (padrão `8h`). |
-| `JWT_ISSUER` | Não | Emissor (`iss`) do token (padrão `greencode-api`). |
-| `JWT_AUDIENCE` | Não | Público (`aud`) do token (padrão `greencode-clients`). |
-| `LOG_LEVEL` | Não | `fatal`, `error`, `warn`, `info`, `debug`, `trace` ou `silent`. Padrão: `info` em produção, `debug` em desenvolvimento e `silent` em teste. |
-| `SEED_ADMIN_PASSWORD` | Só no seed | Senha do admin criado pelo `npm run db:seed`. Obrigatória fora de `development`/`test`. |
+| `NODE_ENV` | Sim | `development`, `production` ou `test` |
+| `DATABASE_URL` | Sim | `postgresql://usuario:senha@host:5432/banco?schema=public` |
+| `JWT_SECRET` | Sim | Segredo de assinatura do JWT. Em produção, mínimo de 32 caracteres |
+| `PORT` | Não | Porta HTTP (padrão `3000`) |
+| `HOST` | Não | Interface de escuta (padrão `0.0.0.0`) |
+| `JWT_EXPIRES_IN` | Não | Validade do token: número + `s`, `m`, `h` ou `d` (padrão `8h`) |
+| `JWT_ISSUER` | Não | Emissor `iss` (padrão `greencode-api`) |
+| `JWT_AUDIENCE` | Não | Público `aud` (padrão `greencode-clients`) |
+| `LOG_LEVEL` | Não | `fatal`…`trace` ou `silent`. Padrão: `info` (produção), `debug` (dev), `silent` (teste) |
+| `SEED_ADMIN_PASSWORD` | Só no seed | Senha do admin criado pelo seed. Obrigatória fora de `development`/`test` e deve respeitar a política de senha |
 
-A aplicação **não inicia** se alguma variável obrigatória estiver ausente ou inválida.
+Gere um segredo forte com: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`.
 
----
-
-## 🚀 Guia de Instalação e Execução Local (Windows e Linux Ubuntu)
-
-### 1. Clonar o Repositório e Instalar Dependências
-
-```bash
-# Clone o repositório
-git clone https://github.com/seu-usuario/AV2.git
-cd AV2
-
-# Instale as dependências
-npm install
-```
-
-### 2. Configurar o Banco de Dados e Carga Inicial (Seed)
-
-Com o PostgreSQL rodando e o `.env` preenchido, execute o comando unificado (gera o Prisma Client, aplica as migrações e popula o banco):
-
-```bash
-npm run setup
-```
-
-Ou execute os passos individualmente:
-
-```bash
-npm run db:generate   # gera o Prisma Client
-npm run db:migrate    # aplica as migrações (desenvolvimento)
-npm run db:seed       # carga inicial (usuário admin; em desenvolvimento a senha é Greencode#Dev2026)
-```
-
-### 3. Executar a Aplicação
-
-#### Modo Desenvolvimento (Hot-reload)
-```bash
-npm run dev
-```
-
-#### Modo Produção (Compilado)
-```bash
-npm run build         # compila o TypeScript para dist/
-npm run start         # inicia dist/server.js
-```
-
-Em ambientes de produção/CI, aplique as migrações com `npm run db:migrate:deploy` (não cria migrações nem pede interação).
-
-### Scripts disponíveis
+## Scripts
 
 | Script | Função |
 | --- | --- |
-| `npm install` | Instala as dependências |
-| `npm run db:generate` | Gera o Prisma Client |
-| `npm run db:migrate` | Aplica migrações em desenvolvimento (`prisma migrate dev`) |
-| `npm run db:migrate:deploy` | Aplica migrações pendentes em produção/CI |
-| `npm run db:seed` | Executa o seed |
-| `npm run db:studio` | Abre o Prisma Studio |
-| `npm run dev` | Servidor em modo desenvolvimento com hot-reload |
-| `npm run build` | Compila o TypeScript |
-| `npm run start` | Inicia o servidor compilado (produção) |
-| `npm run typecheck` | Verifica tipos sem emitir arquivos |
-| `npm test` | Executa a suíte de testes (Vitest) |
-| `npm run test:coverage` | Testes + cobertura com limites mínimos (falha se não atingidos) |
-| `npm run test:watch` | Testes em modo contínuo |
-| `npm run typecheck:tests` | Verifica tipos do código **e** dos testes |
-| `npm run check:arquitetura` | Falha se o Prisma for usado fora da camada de persistência |
+| `npm run dev` | Servidor em desenvolvimento (hot-reload) |
+| `npm run build` / `npm start` | Compila para `dist/` / inicia o compilado (produção) |
 | `npm run setup` | `db:generate` + `db:migrate` + `db:seed` |
+| `npm run db:generate` | Gera o Prisma Client |
+| `npm run db:migrate` | Cria/aplica migrações em desenvolvimento |
+| `npm run db:migrate:deploy` | Aplica migrações pendentes (produção/CI, sem interação) |
+| `npm run db:seed` | Cria/atualiza o usuário administrador |
+| `npm run db:studio` | Interface do Prisma para inspecionar o banco |
+| `npm run typecheck` | Tipos do código (`tsc --noEmit`) |
+| `npm run typecheck:tests` | Tipos do código **e** dos testes |
+| `npm run check:arquitetura` | Falha se o Prisma for usado fora da camada de persistência |
+| `npm test` / `npm run test:watch` | Suíte de testes (Vitest) |
+| `npm run test:coverage` | Testes + cobertura com limites mínimos |
 
-A API estará acessível em `http://localhost:3000`.
+## Produção e Docker
 
-## Execução via Docker (Containerização)
+### Checklist de produção
 
-Construir a Imagem e Rodar o Container
+1. **Ambiente:** `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET` com 32+ caracteres aleatórios (guarde em um gerenciador de segredos, nunca no Git) e `JWT_EXPIRES_IN` curto (ex.: `1h`): não há revogação imediata de token.
+2. **Banco:** `npm run db:migrate:deploy` (nunca `db:migrate` em produção).
+3. **Seed (1ª vez):** `SEED_ADMIN_PASSWORD='<senha forte>' npm run db:seed`.
+4. **Build e start:** `npm ci && npm run db:generate && npm run build && npm start`.
+5. **Rede:** a API não faz TLS, CORS nem limite de tentativas de login. Publique atrás de um proxy reverso com HTTPS (e *rate limit*, se exposta à internet).
+6. **Operação:** use `/api/v1/health` como *readiness/liveness*. O servidor encerra com `SIGINT`/`SIGTERM` fechando as conexões do banco. Logs em JSON no stdout.
 
-### Construir a imagem Docker
+### Docker
 
-```
+```bash
 docker build -t greencode-api .
-```
-
-
-### Rodar o container
-
-O container não inclui o `.env`; as variáveis são passadas em tempo de execução. Como o `localhost` dentro do container não é o da sua máquina, ajuste o host do banco em `DATABASE_URL` (ex.: `host.docker.internal` no Windows/macOS ou o IP do host no Linux). Atenção: o `--env-file` do Docker não remove aspas, então no arquivo usado com ele os valores devem ficar **sem aspas**.
-
-```
 docker run -d -p 3000:3000 --env-file .env --name greencode-app greencode-api
-```
-
-## 3. Executar Migrações e Seed dentro do Container
-
-```
 docker exec -it greencode-app npx prisma migrate deploy
 docker exec -it greencode-app npx tsx prisma/seed.ts
 ```
 
+- O container **não inclui o `.env`**: as variáveis entram em tempo de execução.
+- Dentro do container `localhost` não é a sua máquina: aponte `DATABASE_URL` para o host do banco (`host.docker.internal` no Windows/macOS, IP do host no Linux, ou o nome do serviço em uma rede Docker).
+- O `--env-file` do Docker **não remove aspas**: nesse arquivo deixe os valores sem aspas.
+- A imagem mantém as dependências de desenvolvimento (necessárias para compilar e para a CLI do Prisma) e não é otimizada para tamanho. Não há `docker-compose`; o PostgreSQL deve existir à parte.
 
-## Camada de Domínio
+## Documentação técnica
 
-```
-src/domain/
-├── validators/      # validações reutilizáveis e puras (CNPJ, senha, data de entrada, papel, e-mail)
-├── shared/          # helpers comuns (exigirEncontrado, exigirValido)
-├── usuario/         # usuario.service.ts + usuario.rules.ts
-├── auth/            # auth.service.ts + auth.rules.ts
-├── organizacao/     # organizacao.service.ts + organizacao.rules.ts
-├── lote/            # lote.service.ts + lote.rules.ts
-├── equipamento/     # equipamento.service.ts + equipamento.rules.ts + equipamento.codigo.ts
-└── relatorio/       # relatorio.service.ts
-```
-
-**Convenção**
-
-| Onde | O que contém | Regras de ouro |
-| --- | --- | --- |
-| `validators/` | Funções `validarX(valor)` que retornam `{ valido: true }` ou `{ valido: false, mensagem }` | Puras: sem banco, sem relógio global (a data atual é parâmetro) e sem lançar erro |
-| `<módulo>.rules.ts` | Regras de negócio (`exigirX`, `garantirX`, `protegerX`) | Recebem os dados já carregados e lançam erros tipados quando a regra é violada |
-| `<módulo>.service.ts` | Orquestração do caso de uso | Busca dados, chama as regras, persiste. Decide e documenta se usa transação |
-| `repositories/` | Acesso ao Prisma | Sem regra de negócio e sem decidir transações |
-
-Erros de domínio (em `src/errors`): `RegraDeNegocioError` (400), `NotFoundError` (404), `ConflictError` (409), `UnauthorizedError` (401) e `ForbiddenError` (403). O handler global os converte em resposta HTTP.
-
-### Padrão de transações
-
-O **service** decide, de forma explícita, e registra a decisão em um comentário `Transação: SIM/NÃO` com o motivo. Usa-se `executarEmTransacao` (`src/persistence/transaction.ts`) quando há:
-
-1. mais de uma escrita que precisa ser atômica (ex.: cadastrar equipamento e atualizar o status do lote);
-2. sequência "ler → decidir → gravar" que a concorrência poderia invalidar (ex.: contar administradores antes de rebaixar um deles). Nesses casos usa-se `isolamento: 'serializavel'`; um conflito vira `409` e o cliente pode repetir a operação.
-
-Não se usa transação em escrita única ou quando o banco já garante a invariante (constraint `unique`, *optimistic locking* por `version`). Os repositórios recebem o cliente da transação como último parâmetro (`db`, padrão `prisma`).
-
-| Operação | Transação | Motivo |
-| --- | --- | --- |
-| Cadastrar equipamento | Sim (serializável) | Posição/código sequencial + status do lote |
-| Movimentar equipamento | Sim | Status + histórico atômicos |
-| Rebaixar/remover administrador | Sim (serializável) | Nunca ficar sem administradores |
-| Alterar estado físico | Não | Escrita única com `version` |
-| Criar usuário, organização, lote | Não | Escrita única (unicidade na constraint) |
-| Relatórios | Não | Somente leitura |
-
-## Camada de Persistência
-
-```
-src/persistence/   # client.ts (fábrica do PrismaClient), prisma.ts (instância única), transaction.ts
-src/repositories/  # entities.ts, base.repository.ts e um repositório por agregado
-```
-
-**Regras**
-
-- A instância do Prisma é criada em um só lugar (`src/persistence/prisma.ts`) e só `src/repositories` e `src/persistence` a importam. Serviços e controllers nunca tocam o Prisma; `npm run check:arquitetura` verifica isso.
-- Os enums do Prisma chegam ao restante do código por `src/domain/shared/enums.ts` (único ponto de contato).
-- Os repositórios devolvem tipos próprios (`src/repositories/entities.ts`), não os modelos do Prisma, e não contêm regra de negócio nem decidem transações.
-
-**Contrato padrão** (`CrudRepository`), seguido por `UsuarioRepository`, `OrganizacaoRepository`, `LoteRepository` e `EquipamentoRepository`:
-
-| Método | Observação |
+| Documento | Conteúdo |
 | --- | --- |
-| `findById(id, tx?)` | Retorna `null` se não existir |
-| `findAll(filtro?, tx?)` | Filtros tipados por entidade |
-| `create(data, tx?)` | |
-| `update(id, data, tx?)` | Id inexistente lança P2025 (vira 404) |
-| `delete(id, tx?)` | Retorna `void`; id inexistente lança P2025 |
-| `count(filtro?, tx?)` | |
+| [docs/arquitetura.md](docs/arquitetura.md) | Camadas, ciclo da requisição, persistência, transações, como evoluir o código |
+| [docs/autenticacao.md](docs/autenticacao.md) | Fluxo de login, senhas, JWT, matriz de permissões por papel, limitações |
+| [docs/regras-de-negocio.md](docs/regras-de-negocio.md) | Regras por módulo (usuário, organização, lote, equipamento) e onde estão no código |
+| [docs/api.md](docs/api.md) | Endpoints, papéis, formato de resposta e erros, exemplos |
 
-Leituras específicas de um caso de uso têm nome próprio (`listarComResumo`, `findDetalheById`, `findCredencialByUsuario`, `atualizarComVersao`...). O `RelatorioRepository` só tem consultas agregadas e por isso não segue o contrato CRUD.
-
-**Dados sensíveis**
-
-- `hashSenha` nunca é retornado por padrão: todas as operações de `UsuarioRepository` usam `select` explícito.
-- O único método que devolve o hash é `findCredencialByUsuario`, usado somente na autenticação.
-- Listagens e detalhes trazem apenas os campos necessários (ex.: a organização de um lote vem como `id`, `razaoSocial` e `cnpj`).
-
-## Segurança e Identidade
-
-### Senhas
-
-- Armazenamos somente o hash do **bcrypt** (custo 12). O bcrypt já embute o salt no próprio hash, por isso não existe coluna de salt. Hashes antigos (custo menor) continuam válidos e são regravados com o custo atual no próximo login.
-- **Política** (ao criar ou alterar senha; não se aplica ao login): mínimo de 8 caracteres, com maiúscula, minúscula, número e símbolo; máximo de 72 bytes; não pode conter o nome de usuário nem ser uma senha comum. A política está em `src/domain/validators/senha.ts`.
-- O login de usuário inexistente executa uma comparação "no vazio" para ter o mesmo tempo de resposta de uma senha errada.
-
-### JWT (autenticação stateless)
-
-A aplicação usa **apenas JWT stateless**; não há sessões em banco (a tabela `sessoes`, que nunca foi usada, foi removida).
-
-- Assinatura HS256 com `JWT_SECRET` (obrigatório; mínimo de 32 caracteres em produção).
-- Claims: `sub`, `usuario`, `papel`, `jti`, `iat`, `exp`, `iss` e `aud`. Um token é rejeitado (401) se a assinatura, o algoritmo, a expiração, o emissor, o público ou qualquer claim obrigatório estiver ausente ou inválido.
-- **Limitação conhecida:** como não há consulta ao banco a cada requisição, um token continua válido até expirar mesmo que o usuário seja removido ou tenha o papel alterado. Mitigue com `JWT_EXPIRES_IN` curto em produção. Se for necessário revogar tokens (logout, bloqueio imediato), o caminho é adotar refresh tokens ou uma lista de revogação por `jti`.
-
-### Logs
-
-- Logger estruturado (pino): JSON em produção e formato legível em desenvolvimento, com nível configurável por `LOG_LEVEL`.
-- Tokens, senhas, cookies, headers e query strings **não** são registrados (serializador de requisição enxuto e `redact` de credenciais).
-- Erros do Prisma são registrados apenas com tipo e código, porque a mensagem original contém os valores da consulta.
-- As consultas SQL do Prisma nunca são logadas.
-
-## Contrato da API
-
-### Autenticação
-
-`POST /api/v1/auth/login` retorna um JWT. Envie-o nas demais rotas no cabeçalho `Authorization: Bearer <token>`. O token carrega os claims `sub` (id do usuário), `usuario` e `papel`, definidos em `src/types/auth.ts`.
-
-### Formato das respostas
-
-Toda resposta de sucesso segue o envelope abaixo (`message` e `meta` são opcionais):
-
-```json
-{
-  "data": { },
-  "message": "Lote criado com sucesso.",
-  "meta": { "total": 10 }
-}
-```
-
-Listagens retornam um array em `data` e a quantidade de itens em `meta.total`. Operações sem retorno (ex.: remover usuário) devolvem `"data": null` com `message`.
-
-### Formato dos erros
-
-```json
-{
-  "statusCode": 400,
-  "error": "Bad Request",
-  "message": "Dados da requisição inválidos.",
-  "details": [{ "local": "body", "campo": "cnpj", "mensagem": "Campo obrigatório." }]
-}
-```
-
-`details` aparece apenas em erros de validação (400). Os demais erros trazem somente `statusCode`, `error` e `message`.
-
-### Validação
-
-Os payloads (body e parâmetros de rota) são validados com **Zod** antes de chegar ao controller. Os schemas ficam em `src/schemas/` e alimentam também a documentação Swagger. Os campos devem respeitar os tipos JSON (ex.: `anoFabricacao` é número, não texto). Respostas também passam por schema, então campos que não fazem parte do contrato (como hash de senha) nunca são enviados ao cliente.
-
-## Documentação da API (Swagger / OpenAPI)
-
-A documentação interativa da API é gerada automaticamente e pode ser acessada após iniciar o servidor:
-
-URL da Documentação: http://localhost:3000/docs
-
-## Verificação de Qualidade e Tipagem
-
-Para garantir a estrita conformidade do TypeScript sem emissão de erros:
+Estrutura resumida:
 
 ```
-npm run typecheck
+src/
+├── routes/ controllers/ schemas/   # HTTP: rotas, controllers finos, contratos Zod
+├── domain/<módulo>/                # *.service.ts (casos de uso) + *.rules.ts (regras) + validators/
+├── repositories/ persistence/      # único acesso ao Prisma; transações
+├── security/ errors/ config/ http/ # JWT/RBAC, erros tipados, ambiente/logger, envelope de resposta
+prisma/                             # schema, migrações e seed
+tests/                              # unit/ e integration/ (banco em memória)
+scripts/                            # check-prisma-boundary.mjs
 ```
 
 ## Testes e Integração Contínua
 
-```
+```bash
 npm test                # suíte completa
 npm run test:coverage   # com cobertura e limites mínimos
 ```
 
-**Não é necessário PostgreSQL para rodar os testes.** Os repositórios e a transação são substituídos por um
-banco em memória (`tests/helpers/fakes.ts`) que implementa os mesmos contratos de `src/repositories`;
-serviços, regras, rotas, validação, JWT e tratamento de erros rodam de verdade (via `app.inject`).
+**Não é necessário PostgreSQL para rodar os testes.** Repositórios e transação são substituídos por um banco em memória (`tests/helpers/fakes.ts`) que implementa os mesmos contratos de `src/repositories`; serviços, regras, rotas, validação, JWT e tratamento de erros rodam de verdade (via `app.inject`).
 
 | Tipo | Local | O que cobre |
 | --- | --- | --- |
-| Unitários | `tests/unit` | Validadores (CNPJ, senha, data de entrada, papel, e-mail), hash de senha, regras de lote/organização/usuário/equipamento, serviços, mapeamento de erros, `env`, redação de logs |
-| Integração (HTTP) | `tests/integration` | Login, criação de usuário, matriz de autorização papel × rota, JWT forjado/expirado, proteção do último administrador, erros de negócio (400/401/403/404/409/500) |
+| Unitários | `tests/unit` | Validadores, hash de senha, regras e serviços, mapeamento de erros, `env`, redação de logs |
+| Integração (HTTP) | `tests/integration` | Login, criação de usuário, matriz papel × rota, JWT forjado/expirado, proteção do último administrador, erros de negócio |
 
-**Cobertura mínima** (`vitest.config.ts`, aplicada por `npm run test:coverage`): global 80% (ramos 70%) e limites
-mais altos nos módulos críticos: `src/security` e `src/domain/auth` (autenticação/autorização), validadores,
-regras de domínio e serviços de usuário, organização e lote.
+**Cobertura mínima** (`vitest.config.ts`): global 80% (ramos 70%) e limites mais altos em segurança, autenticação, validadores, regras de domínio e serviços de usuário, organização e lote.
 
-**CI** (`.github/workflows/ci.yml`): em todo *pull request* e em *push* para `main`/`master`, com Node 20 e 22:
-`npm ci` → `prisma generate` → `tsc --noEmit` → tipos dos testes → `check:arquitetura` → testes com cobertura → `build`.
-Usa `npm ci` (instala exatamente o `package-lock.json`) em vez de `npm install`, para builds reprodutíveis.
+**CI** (`.github/workflows/ci.yml`): em todo *pull request* e em *push* para `main`/`master`, com Node 20 e 22: `npm ci` → `prisma generate` → `tsc --noEmit` → tipos dos testes → `check:arquitetura` → testes com cobertura → `build`.
 
-**Limitação conhecida:** como o banco é simulado, comportamentos do PostgreSQL (isolamento serializável,
-constraints reais, migrações) não são exercitados. Um *job* de CI com PostgreSQL real é o próximo passo natural.
+**Limitação:** como o banco é simulado, o comportamento real do PostgreSQL (isolamento serializável, constraints, migrações) não é exercitado. Um job de CI com PostgreSQL real é o próximo passo natural.
+
+## Problemas comuns
+
+| Sintoma | Causa e solução |
+| --- | --- |
+| `Cannot convert undefined or null to object` em `Object.values(PapelUsuario)`, muitos testes falhando | Prisma Client não gerado (acontece após `npm ci`, que recria o `node_modules`). Rode `npm run db:generate` |
+| Aviso `install-scripts ... not yet covered by allowScripts` no `npm ci` | Informativo do npm; os scripts de instalação de Prisma, bcrypt e esbuild não rodaram. Gere o client com `npm run db:generate` |
+| A aplicação não sobe e lista variáveis inválidas | Corrija o `.env` conforme a [tabela acima](#variáveis-de-ambiente) |
+| `P1001` / 503 ao chamar a API | Banco inacessível: confira `DATABASE_URL`, host e se o PostgreSQL está rodando |
+| `git am` falha com "does not match index" | Há alteração local no arquivo; descarte-a com `git checkout -- <arquivo>` e repita |
+| Seed recusa a senha | `SEED_ADMIN_PASSWORD` não respeita a política (8+ caracteres, maiúscula, minúscula, número, símbolo, sem o nome `admin`) ou não foi definida fora de dev |
+
+## Limitações conhecidas
+
+- Token JWT não é revogável antes de expirar (use validade curta).
+- Sem CORS, *rate limit* nem TLS embutidos.
+- O modelo `Contrato` existe no banco, mas não há endpoint.
+- Testes não usam PostgreSQL real.
+- `npm audit` aponta avisos em dependências de **desenvolvimento** (Vitest e transitivas); não afetam o build de produção.
 
 ## Compatibilidade
 
-Windows: Windows 10 ou superior (PowerShell / CMD)
-
-Linux: Ubuntu 24.04 LTS ou superior / distribuições derivadas
-
-Containers: Docker / Docker Compose
+Windows 10 ou superior (PowerShell/CMD) e Linux (Ubuntu 24.04 LTS ou derivadas); containers via Docker.
