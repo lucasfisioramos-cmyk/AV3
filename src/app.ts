@@ -19,6 +19,7 @@ import { usuarioRoutes } from './routes/usuario.js';
 import { authRoutes } from './routes/auth.js';
 
 
+// Monta a aplicação SEM `listen`: server.ts sobe o servidor e os testes usam `app.inject`.
 export const app = Fastify({
   logger: loggerOptions,
 });
@@ -48,7 +49,7 @@ await app.register(fastifySwagger, {
     info: {
       title: 'Greencode API',
       description: 'API Backend para Gestão e Rastreabilidade de Resíduos Eletrônicos (E-Waste)',
-      version: '1.0.0',
+      version: '2.0.0',
     },
     components: {
       securitySchemes: {
