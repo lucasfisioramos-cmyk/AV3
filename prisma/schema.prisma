@@ -123,6 +123,7 @@ model Lote {
 
   equipamentos        Equipamento[]
 
+  @@unique([organizacaoId, notaFiscal], map: "lotes_organizacao_id_nota_fiscal_key")
   @@map("lotes")
 }
 
