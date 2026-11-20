@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, master]
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -21,6 +21,20 @@ jobs:
       fail-fast: false
       matrix:
         node: [20, 22]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: av2_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +63,18 @@ jobs:
 
       - name: Testes com cobertura mínima
         run: npm run test:coverage
+
+      - name: Migrar banco de teste (PostgreSQL)
+        if: matrix.node == 22
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres@localhost:5432/av2_test
+
+      - name: Testes de integração com PostgreSQL real
+        if: matrix.node == 22
+        run: npm run test:db
+        env:
+          DATABASE_URL: postgresql://postgres@localhost:5432/av2_test
 
       - name: Build
         run: npm run build

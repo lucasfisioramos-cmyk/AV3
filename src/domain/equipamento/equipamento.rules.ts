@@ -1,5 +1,6 @@
-import { EstadoFisico, StatusRastreamento } from '../shared/enums.js';
+import { EstadoFisico, StatusLote, StatusRastreamento } from '../shared/enums.js';
 import { ConflictError, RegraDeNegocioError } from '../../errors/app-error.js';
+import { LoteRules } from '../lote/lote.rules.js';
 
 // Hierarquia do estado físico (quanto maior, melhor). Base da regra de rebaixamento.
 const HIERARQUIA_ESTADO_FISICO: Record<EstadoFisico, number> = {
@@ -62,5 +63,27 @@ export const EquipamentoRules = {
     if (!identificador) {
       throw new RegraDeNegocioError('O identificador (ID ou Código de Barras) é obrigatório.');
     }
+  },
+
+  exigirPodeExcluir(
+    equipamento: { statusRastreamento: StatusRastreamento },
+    totalMovimentacoes: number,
+    lote: { statusProcessamento: StatusLote }
+  ): void {
+    LoteRules.exigirLoteAbertoParaEquipamentos(lote);
+
+    if (equipamento.statusRastreamento !== StatusRastreamento.AGUARDANDO_TRIAGEM) {
+      throw new RegraDeNegocioError(
+        `Não é permitido excluir equipamento com status '${equipamento.statusRastreamento}'. Apenas equipamentos 'AGUARDANDO_TRIAGEM' podem ser excluídos.`
+      );
+    }
+
+    if (totalMovimentacoes > 0) {
+      throw new RegraDeNegocioError('Não é permitido excluir equipamento que já possui histórico de movimentações.');
+    }
+  },
+
+  exigirPodeEditar(lote: { statusProcessamento: StatusLote }): void {
+    LoteRules.exigirLoteAbertoParaEquipamentos(lote);
   },
 };

@@ -73,11 +73,47 @@ describe('proteções de administrador (HTTP)', () => {
     expect(db.usuarios.get(outro.id)?.papel).toBe('AUDITOR');
   });
 
-  it('PATCH /me/senha: qualquer usuário troca a PRÓPRIA senha, respeitando a política', async () => {
+  it('PATCH /me/senha: exige senhaAtual e novaSenha respeitando política e validação de credencial (S3)', async () => {
     const op = await db.semear.usuario({ usuario: 'op', papel: 'OPERADOR_CADASTRO' });
-    expect((await req('PATCH', '/api/v1/usuarios/me/senha', op, { novaSenha: 'fraca' })).statusCode).toBe(400);
-    expect((await req('PATCH', '/api/v1/usuarios/me/senha', op, { novaSenha: 'Nova#Senha77' })).statusCode).toBeLessThan(300);
-    const login = await (await obterApp()).inject({ method: 'POST', url: '/api/v1/auth/login', payload: { usuario: 'op', senha: 'Nova#Senha77' } });
-    expect(login.statusCode).toBe(200);
+
+    // 400: senhaAtual ausente
+    const resSemAtual = await req('PATCH', '/api/v1/usuarios/me/senha', op, { novaSenha: 'Nova#Senha77' });
+    expect(resSemAtual.statusCode).toBe(400);
+
+    // 400: novaSenha fraca
+    const resFraca = await req('PATCH', '/api/v1/usuarios/me/senha', op, { senhaAtual: SENHA_TESTE, novaSenha: 'fraca' });
+    expect(resFraca.statusCode).toBe(400);
+
+    // 400: novaSenha igual à senhaAtual
+    const resIgual = await req('PATCH', '/api/v1/usuarios/me/senha', op, { senhaAtual: SENHA_TESTE, novaSenha: SENHA_TESTE });
+    expect(resIgual.statusCode).toBe(400);
+    expect(resIgual.json()).toMatchObject({
+      statusCode: 400,
+      message: 'A nova senha deve ser diferente da senha atual.',
+    });
+
+    // 401: senhaAtual incorreta (não altera o banco)
+    const resErrada = await req('PATCH', '/api/v1/usuarios/me/senha', op, { senhaAtual: 'SenhaIncorreta#123', novaSenha: 'Nova#Senha77' });
+    expect(resErrada.statusCode).toBe(401);
+    expect(resErrada.json()).toMatchObject({
+      statusCode: 401,
+      message: 'Senha atual incorreta.',
+    });
+
+    // Login com senha antiga continua funcionando após tentativa com senha errada
+    const loginAindaAntiga = await (await obterApp()).inject({ method: 'POST', url: '/api/v1/auth/login', payload: { usuario: 'op', senha: SENHA_TESTE } });
+    expect(loginAindaAntiga.statusCode).toBe(200);
+
+    // Sucesso: senhaAtual correta e novaSenha válida diferente
+    const resSucesso = await req('PATCH', '/api/v1/usuarios/me/senha', op, { senhaAtual: SENHA_TESTE, novaSenha: 'Nova#Senha77' });
+    expect(resSucesso.statusCode).toBeLessThan(300);
+
+    // Login com nova senha agora funciona
+    const loginNova = await (await obterApp()).inject({ method: 'POST', url: '/api/v1/auth/login', payload: { usuario: 'op', senha: 'Nova#Senha77' } });
+    expect(loginNova.statusCode).toBe(200);
+
+    // Login com senha antiga agora é rejeitado
+    const loginAntigaFalha = await (await obterApp()).inject({ method: 'POST', url: '/api/v1/auth/login', payload: { usuario: 'op', senha: SENHA_TESTE } });
+    expect(loginAntigaFalha.statusCode).toBe(401);
   });
 });

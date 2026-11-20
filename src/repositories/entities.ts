@@ -17,8 +17,16 @@ export interface Usuario {
   usuario: string;
   papel: PapelUsuario;
   ultimoAcesso: Date | null;
+  tokensValidosApos: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface TokenRevogado {
+  jti: string;
+  expiresAt: Date;
+  motivo: string;
+  createdAt: Date;
 }
 
 export interface Organizacao {
@@ -36,6 +44,23 @@ export interface Organizacao {
 }
 
 export type OrganizacaoResumo = Pick<Organizacao, 'id' | 'razaoSocial' | 'cnpj'>;
+
+export interface Contrato {
+  id: string;
+  organizacaoId: string;
+  dataAssinatura: Date;
+  dataVencimento: Date;
+  clausulas: string[];
+  valorMensal: number;
+  renovacaoAutomatica: boolean;
+  ativo: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface OrganizacaoDetalhe extends Organizacao {
+  contratoVigente: Contrato | null;
+}
 
 export interface Lote {
   id: string;

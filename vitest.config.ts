@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
+    exclude: ['tests/integration/db/**', '**/node_modules/**', '**/dist/**'],
     setupFiles: ['tests/setup.ts'],
     // Variáveis mínimas para a aplicação subir em teste (sem banco real).
     env: {

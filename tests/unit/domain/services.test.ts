@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AuthService } from '../../../src/domain/auth/auth.service.js';
+import { ContratoService } from '../../../src/domain/contrato/contrato.service.js';
 import { LoteService } from '../../../src/domain/lote/lote.service.js';
 import { OrganizacaoService } from '../../../src/domain/organizacao/organizacao.service.js';
 import { UsuarioService } from '../../../src/domain/usuario/usuario.service.js';
@@ -49,6 +50,18 @@ describe('AuthService.autenticar', () => {
 });
 
 describe('UsuarioService', () => {
+  it('listarUsuarios: lista com paginação padrão e filtros', async () => {
+    await db.semear.usuario({ usuario: 'listar_usr', papel: 'AUDITOR' });
+    const padrao = await UsuarioService.listarUsuarios();
+    expect(padrao.page).toBe(1);
+    expect(padrao.limit).toBe(20);
+    expect(padrao.total).toBeGreaterThanOrEqual(1);
+
+    const filtrado = await UsuarioService.listarUsuarios({ page: 2, limit: 10, papel: 'AUDITOR' });
+    expect(filtrado.page).toBe(2);
+    expect(filtrado.limit).toBe(10);
+  });
+
   it('cria usuário gravando apenas o hash bcrypt (nunca a senha)', async () => {
     const criado = await UsuarioService.criarUsuario({ usuario: 'joao', senhaPlana: SENHA_TESTE, papel: 'AUDITOR' as never });
     expect(criado).not.toHaveProperty('hashSenha');
@@ -127,11 +140,65 @@ describe('UsuarioService', () => {
       await db.semear.usuario({ usuario: 'ocupado' });
       await expect(UsuarioService.editarUsuario({ idUsuarioAlvo: a.id, idUsuarioExecuto: a.id, novoUsuario: 'ocupado' })).rejects.toBeInstanceOf(ConflictError);
     });
+
+    describe('alterarMinhaSenha', () => {
+      it('rejeita quando senhaAtual for incorreta (UnauthorizedError)', async () => {
+        const u = await db.semear.usuario({ usuario: 'troca_senha' });
+        await expect(
+          UsuarioService.alterarMinhaSenha({
+            idUsuario: u.id,
+            senhaAtual: 'SenhaIncorreta#123',
+            novaSenha: 'Nova#Senha123',
+          })
+        ).rejects.toBeInstanceOf(UnauthorizedError);
+      });
+
+      it('rejeita quando novaSenha for igual à senhaAtual (RegraDeNegocioError)', async () => {
+        const u = await db.semear.usuario({ usuario: 'troca_senha' });
+        await expect(
+          UsuarioService.alterarMinhaSenha({
+            idUsuario: u.id,
+            senhaAtual: SENHA_TESTE,
+            novaSenha: SENHA_TESTE,
+          })
+        ).rejects.toThrow(/diferente da senha atual/);
+      });
+
+      it('atualiza o hash quando dados são válidos', async () => {
+        const u = await db.semear.usuario({ usuario: 'troca_senha' });
+        await UsuarioService.alterarMinhaSenha({
+          idUsuario: u.id,
+          senhaAtual: SENHA_TESTE,
+          novaSenha: 'Nova#Senha123',
+        });
+        expect(await AuthService.autenticar('troca_senha', 'Nova#Senha123')).toMatchObject({ usuario: 'troca_senha' });
+      });
+    });
   });
 });
 
 describe('OrganizacaoService', () => {
   const dados = { razaoSocial: 'ACME', cnpj: '11.222.333/0001-81', enderecoCompleto: 'Rua A', email: 'a@acme.com' };
+
+  it('listarTodas: aplica paginação padrão quando parâmetros são omitidos', async () => {
+    await db.semear.organizacao({ razaoSocial: 'Org 1', cnpj: '11222333000181' });
+    const res = await OrganizacaoService.listarTodas();
+    expect(res.page).toBe(1);
+    expect(res.limit).toBe(20);
+    expect(res.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it('listarTodas: aplica filtros específicos e paginação customizada', async () => {
+    const res = await OrganizacaoService.listarTodas({
+      page: 2,
+      limit: 5,
+      ativo: true,
+      cnpj: '11222333',
+      razaoSocial: 'Org',
+    });
+    expect(res.page).toBe(2);
+    expect(res.limit).toBe(5);
+  });
 
   it('grava o CNPJ só com dígitos e telefone vazio quando ausente', async () => {
     const o = await OrganizacaoService.criarOrganizacao(dados);
@@ -152,6 +219,26 @@ describe('OrganizacaoService', () => {
 });
 
 describe('LoteService.criarLote', () => {
+  it('listarLotes: lista com paginação padrão e filtros', async () => {
+    const o = await db.semear.organizacao();
+    await db.semear.lote(o.id);
+    const padrao = await LoteService.listarLotes();
+    expect(padrao.page).toBe(1);
+    expect(padrao.limit).toBe(20);
+    expect(padrao.total).toBeGreaterThanOrEqual(1);
+
+    const filtrado = await LoteService.listarLotes({
+      page: 2,
+      limit: 5,
+      organizacaoId: o.id,
+      status: 'RECEBIDO',
+      dataEntradaInicio: new Date('2020-01-01'),
+      dataEntradaFim: new Date('2030-01-01'),
+    });
+    expect(filtrado.page).toBe(2);
+    expect(filtrado.limit).toBe(5);
+  });
+
   it('cria lote RECEBIDO com data atual por padrão', async () => {
     const o = await db.semear.organizacao();
     const l = await LoteService.criarLote({ organizacaoId: o.id, notaFiscal: 'NF-1', transportadora: 'T' });
@@ -175,5 +262,21 @@ describe('LoteService.criarLote', () => {
     const b = await db.semear.organizacao({ cnpj: '45723174000110', razaoSocial: 'B' });
     await LoteService.criarLote({ organizacaoId: a.id, notaFiscal: 'NF-9', transportadora: 'T' });
     await expect(LoteService.criarLote({ organizacaoId: b.id, notaFiscal: 'NF-9', transportadora: 'T' })).resolves.toBeDefined();
+  });
+});
+
+describe('ContratoService', () => {
+  it('listarHistoricoPorOrganizacao: lista contratos e rejeita se organização não existir', async () => {
+    await expect(ContratoService.listarHistoricoPorOrganizacao('inexistente')).rejects.toBeInstanceOf(NotFoundError);
+
+    const org = await db.semear.organizacao();
+    const c1 = await db.semear.contrato(org.id);
+    await db.contratoRepository.desativar(c1.id);
+    const c2 = await db.semear.contrato(org.id, { valorMensal: 3000 });
+
+    const historico = await ContratoService.listarHistoricoPorOrganizacao(org.id);
+    expect(historico.length).toBe(2);
+    expect(historico.map((c) => c.id)).toContain(c1.id);
+    expect(historico.map((c) => c.id)).toContain(c2.id);
   });
 });

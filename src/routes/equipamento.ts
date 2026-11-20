@@ -5,13 +5,20 @@ import { errors, idParamsSchema } from '../schemas/common.schema.js';
 import {
   alterarEstadoFisicoBodySchema,
   criarEquipamentoBodySchema,
+  editarEquipamentoBodySchema,
+  equipamentoExcluidoResponseSchema,
   equipamentoResponseSchema,
+  listarEquipamentosQuerySchema,
+  listarEquipamentosResponseSchema,
   movimentarEquipamentoBodySchema,
   movimentarEquipamentoResponseSchema,
   rastrearEquipamentoResponseSchema,
   rastrearParamsSchema,
   type AlterarEstadoFisicoRoute,
   type CriarEquipamentoRoute,
+  type EditarEquipamentoRoute,
+  type ExcluirEquipamentoRoute,
+  type ListarEquipamentosRoute,
   type MovimentarEquipamentoRoute,
   type RastrearEquipamentoRoute,
 } from '../schemas/equipamento.schema.js';
@@ -20,6 +27,19 @@ export async function equipamentoRoutes(app: FastifyInstance) {
   app.addHook('onRequest', app.authenticate);
 
   const operadores = authorize(GRUPOS_DE_ACESSO.OPERACAO_DE_EQUIPAMENTOS);
+
+  app.get<ListarEquipamentosRoute>(
+    '/',
+    {
+      schema: {
+        tags: ['Equipamentos'],
+        summary: 'Lista equipamentos com filtros e paginação',
+        querystring: listarEquipamentosQuerySchema,
+        response: { 200: listarEquipamentosResponseSchema, ...errors(400, 401) },
+      },
+    },
+    EquipamentoController.index
+  );
 
   app.get<RastrearEquipamentoRoute>(
     '/rastrear/:identificador',
@@ -76,5 +96,34 @@ export async function equipamentoRoutes(app: FastifyInstance) {
       },
     },
     EquipamentoController.alterarEstadoFisico
+  );
+
+  app.patch<EditarEquipamentoRoute>(
+    '/:id',
+    {
+      onRequest: operadores,
+      schema: {
+        tags: ['Equipamentos'],
+        summary: 'Edita metadados descritivos de um equipamento',
+        params: idParamsSchema,
+        body: editarEquipamentoBodySchema,
+        response: { 200: equipamentoResponseSchema, ...errors(400, 401, 403, 404) },
+      },
+    },
+    EquipamentoController.update
+  );
+
+  app.delete<ExcluirEquipamentoRoute>(
+    '/:id',
+    {
+      onRequest: operadores,
+      schema: {
+        tags: ['Equipamentos'],
+        summary: 'Exclui um equipamento (apenas se em triagem e sem movimentações)',
+        params: idParamsSchema,
+        response: { 200: equipamentoExcluidoResponseSchema, ...errors(400, 401, 403, 404) },
+      },
+    },
+    EquipamentoController.delete
   );
 }

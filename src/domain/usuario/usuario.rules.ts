@@ -70,4 +70,10 @@ export const UsuarioRules = {
       throw new RegraDeNegocioError('Nenhum dado válido foi fornecido para atualização.');
     }
   },
+
+  garantirNovaSenhaDiferente(senhaAtual: string, novaSenha: string): void {
+    if (senhaAtual === novaSenha) {
+      throw new RegraDeNegocioError('A nova senha deve ser diferente da senha atual.');
+    }
+  },
 };

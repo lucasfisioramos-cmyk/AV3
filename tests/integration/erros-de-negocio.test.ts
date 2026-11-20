@@ -66,14 +66,60 @@ describe('lotes: regras de data de entrada e nota fiscal', () => {
     expect((await chamar('POST', '/api/v1/lotes', ga, { organizacaoId: '123', notaFiscal: 'NF', transportadora: 'T' })).statusCode).toBe(400);
   });
 
-  it('data de entrada fora da janela: a API de criação não aceita dataEntrada; a regra é aplicada no serviço', async () => {
-    // O contrato HTTP não expõe dataEntrada (lote nasce "agora"); a regra dos 90 dias é validada
-    // diretamente em services.test.ts / data-entrada.test.ts. Aqui garantimos que o campo é ignorado.
+  it('data de entrada opcional na criação do lote (TASK-11 / N1)', async () => {
     const ga = await db.semear.usuario({ papel: 'GESTOR_ALMOXARIFADO' });
     const org = await db.semear.organizacao();
-    const res = await chamar('POST', '/api/v1/lotes', ga, { organizacaoId: org.id, notaFiscal: 'NF-3', transportadora: 'T', dataEntrada: '2000-01-01T00:00:00Z' });
-    expect(res.statusCode).toBe(201);
-    expect(Math.abs(new Date(res.json().data.dataEntrada).getTime() - Date.now())).toBeLessThan(60_000);
+
+    // 1. Data retroativa válida (15 dias atrás) em formato ISO 8601 -> 201 Created com a data informada
+    const dataValida15DiasAtras = new Date(Date.now() - 15 * 86_400_000).toISOString();
+    const resValido = await chamar('POST', '/api/v1/lotes', ga, {
+      organizacaoId: org.id,
+      notaFiscal: 'NF-RETROATIVA-15',
+      transportadora: 'T',
+      dataEntrada: dataValida15DiasAtras,
+    });
+    expect(resValido.statusCode).toBe(201);
+    expect(new Date(resValido.json().data.dataEntrada).toISOString()).toBe(new Date(dataValida15DiasAtras).toISOString());
+
+    // 2. Data de entrada omitida -> 201 Created assumindo now()
+    const resOmitido = await chamar('POST', '/api/v1/lotes', ga, {
+      organizacaoId: org.id,
+      notaFiscal: 'NF-SEM-DATA',
+      transportadora: 'T',
+    });
+    expect(resOmitido.statusCode).toBe(201);
+    expect(Math.abs(new Date(resOmitido.json().data.dataEntrada).getTime() - Date.now())).toBeLessThan(60_000);
+
+    // 3. Data de entrada futura -> 400 Bad Request (RegraDeNegocioError)
+    const dataFutura = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const resFutura = await chamar('POST', '/api/v1/lotes', ga, {
+      organizacaoId: org.id,
+      notaFiscal: 'NF-FUTURA',
+      transportadora: 'T',
+      dataEntrada: dataFutura,
+    });
+    expect(resFutura.statusCode).toBe(400);
+    expect(resFutura.json().message).toBe('Regra Violada: A data de entrada do lote não pode ser uma data futura.');
+
+    // 4. Data de entrada anterior a 90 dias -> 400 Bad Request (RegraDeNegocioError)
+    const dataMuitoAntiga = new Date(Date.now() - 120 * 86_400_000).toISOString();
+    const resMuitoAntiga = await chamar('POST', '/api/v1/lotes', ga, {
+      organizacaoId: org.id,
+      notaFiscal: 'NF-ANTIGA',
+      transportadora: 'T',
+      dataEntrada: dataMuitoAntiga,
+    });
+    expect(resMuitoAntiga.statusCode).toBe(400);
+    expect(resMuitoAntiga.json().message).toBe('Regra Violada: A data de entrada do lote não pode ser anterior a 90 dias.');
+
+    // 5. Data de entrada em formato inválido / não-ISO -> 400 Bad Request (validação do schema)
+    const resFormatoInvalido = await chamar('POST', '/api/v1/lotes', ga, {
+      organizacaoId: org.id,
+      notaFiscal: 'NF-INVALIDA',
+      transportadora: 'T',
+      dataEntrada: 'data-invalida',
+    });
+    expect(resFormatoInvalido.statusCode).toBe(400);
   });
 });
 

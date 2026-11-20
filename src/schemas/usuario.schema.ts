@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dateTimeSchema, envelope, type IdParams } from './common.schema.js';
+import { dateTimeSchema, envelope, listEnvelope, paginacaoQuerySchema, type IdParams } from './common.schema.js';
 import { papelUsuarioSchema } from './entities.schema.js';
 
 // bcrypt ignora bytes além de 72; limitar evita senhas "truncadas" silenciosamente.
@@ -25,9 +25,18 @@ export const editarUsuarioBodySchema = z
   });
 export type EditarUsuarioBody = z.infer<typeof editarUsuarioBodySchema>;
 
-export const alterarMinhaSenhaBodySchema = z.object({ novaSenha: senhaSchema });
+export const alterarMinhaSenhaBodySchema = z.object({
+  senhaAtual: z.string().min(1, 'Informe a senha atual.'),
+  novaSenha: senhaSchema,
+});
 export type AlterarMinhaSenhaBody = z.infer<typeof alterarMinhaSenhaBodySchema>;
 
+export const listarUsuariosQuerySchema = paginacaoQuerySchema.extend({
+  papel: papelUsuarioSchema.optional(),
+});
+export type ListarUsuariosQuery = z.infer<typeof listarUsuariosQuerySchema>;
+
+export type ListarUsuariosRoute = { Querystring: ListarUsuariosQuery };
 export type CriarUsuarioRoute = { Body: CriarUsuarioBody };
 export type EditarUsuarioRoute = { Params: IdParams; Body: EditarUsuarioBody };
 export type AlterarMinhaSenhaRoute = { Body: AlterarMinhaSenhaBody };
@@ -53,3 +62,15 @@ export const usuarioAtualizadoResponseSchema = envelope(
 );
 
 export const semConteudoResponseSchema = envelope(z.null());
+
+export const usuarioResumoSchema = z.object({
+  id: z.string(),
+  usuario: z.string(),
+  papel: papelUsuarioSchema,
+  ultimoAcesso: dateTimeSchema.nullable(),
+  createdAt: dateTimeSchema,
+  updatedAt: dateTimeSchema,
+});
+export type UsuarioResumo = z.infer<typeof usuarioResumoSchema>;
+
+export const listarUsuariosResponseSchema = listEnvelope(usuarioResumoSchema);

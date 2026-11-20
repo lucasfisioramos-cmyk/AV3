@@ -28,4 +28,13 @@ export class AuthController {
       { message: 'Login realizado com sucesso.' }
     );
   }
+
+  static async logout(request: FastifyRequest, reply: FastifyReply) {
+    const { jti, exp } = request.user;
+    const expiresAt = new Date(exp * 1000);
+
+    await AuthService.revogarToken({ jti, expiresAt, motivo: 'LOGOUT' });
+
+    return sendSuccess(reply, null, { message: 'Logout realizado com sucesso.' });
+  }
 }

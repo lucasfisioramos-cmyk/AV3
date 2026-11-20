@@ -63,15 +63,26 @@ enum StatusRastreamento {
 // ======================================================
 
 model Usuario {
-  id           String       @id @default(uuid())
-  usuario      String       @unique
-  hashSenha    String
-  papel        PapelUsuario @default(OPERADOR_CADASTRO)
-  ultimoAcesso DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id                String       @id @default(uuid())
+  usuario           String       @unique
+  hashSenha         String
+  papel             PapelUsuario @default(OPERADOR_CADASTRO)
+  ultimoAcesso      DateTime?
+  tokensValidosApos DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   @@map("usuarios")
+}
+
+model TokenRevogado {
+  jti       String   @id
+  expiresAt DateTime
+  motivo    String
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("tokens_revogados")
 }
 
 model Organizacao {
@@ -87,7 +98,7 @@ model Organizacao {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  contratoVigente   Contrato?
+  contratos         Contrato[]
   lotes             Lote[]
 
   @@map("organizacoes")
@@ -95,16 +106,18 @@ model Organizacao {
 
 model Contrato {
   id                  String      @id @default(uuid())
-  organizacaoId       String      @unique
+  organizacaoId       String
   organizacao         Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
   dataAssinatura      DateTime
   dataVencimento      DateTime
   clausulas           Json        // Armazena a lista de cláusulas (string[])
   valorMensal         Float
   renovacaoAutomatica Boolean     @default(true)
+  ativo               Boolean     @default(true)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
+  @@index([organizacaoId, ativo])
   @@map("contratos")
 }
 

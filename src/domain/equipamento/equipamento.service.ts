@@ -35,6 +35,21 @@ export interface AlterarEstadoFisicoInput {
   version: number;
 }
 
+export interface EditarEquipamentoInput {
+  marca?: string;
+  modelo?: string;
+  anoFabricacao?: number;
+  pesoQuilogramas?: number;
+}
+
+export interface ListarEquipamentosInput {
+  loteId?: string;
+  tipo?: TipoEquipamento;
+  statusRastreamento?: StatusRastreamento;
+  page?: number;
+  limit?: number;
+}
+
 const MSG_VERSAO_MOVIMENTACAO =
   'O registro foi atualizado por outro usuário simultaneamente. Recarregue os dados e tente novamente.';
 const MSG_FALHA_MOVIMENTACAO = 'Falha de concorrência ao movimentar o equipamento. Tente novamente.';
@@ -54,6 +69,8 @@ export class EquipamentoService {
           await LoteRepository.findById(data.loteId, tx),
           `Lote '${data.loteId}' não encontrado.`
         );
+
+        LoteRules.exigirLoteAbertoParaEquipamentos(lote);
 
         const posicaoNoLote = (await EquipamentoRepository.count({ loteId: data.loteId }, tx)) + 1;
 
@@ -145,5 +162,77 @@ export class EquipamentoService {
       await EquipamentoRepository.findDetalheByIdentificador(identificador),
       `Equipamento não encontrado para o identificador "${identificador}".`
     );
+  }
+
+  // 4.1 Listar equipamentos com filtros e paginação
+  static async listarEquipamentos(params: ListarEquipamentosInput = {}) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const filtro = {
+      loteId: params.loteId,
+      tipo: params.tipo,
+      statusRastreamento: params.statusRastreamento,
+      skip,
+      take: limit,
+    };
+
+    const countFiltro = {
+      loteId: params.loteId,
+      tipo: params.tipo,
+      statusRastreamento: params.statusRastreamento,
+    };
+
+    const [itens, total] = await Promise.all([
+      EquipamentoRepository.findAll(filtro),
+      EquipamentoRepository.count(countFiltro),
+    ]);
+
+    return { itens, total, page, limit };
+  }
+
+  // 5. Editar metadados descritivos do equipamento
+  static async editarEquipamento(id: string, data: EditarEquipamentoInput) {
+    const equipamento = exigirEncontrado(
+      await EquipamentoRepository.findById(id),
+      'Equipamento não encontrado.'
+    );
+
+    const lote = exigirEncontrado(
+      await LoteRepository.findById(equipamento.loteId),
+      'Lote vinculado não encontrado.'
+    );
+
+    EquipamentoRules.exigirPodeEditar(lote);
+
+    if (data.anoFabricacao !== undefined) {
+      EquipamentoRules.exigirAnoFabricacaoValido(data.anoFabricacao);
+    }
+    if (data.pesoQuilogramas !== undefined) {
+      EquipamentoRules.exigirPesoPositivo(data.pesoQuilogramas);
+    }
+
+    return EquipamentoRepository.update(id, data);
+  }
+
+  // 6. Excluir equipamento
+  static async excluirEquipamento(id: string) {
+    return executarEmTransacao(async (tx) => {
+      const equipamento = exigirEncontrado(
+        await EquipamentoRepository.findById(id, tx),
+        'Equipamento não encontrado.'
+      );
+
+      const lote = exigirEncontrado(
+        await LoteRepository.findById(equipamento.loteId, tx),
+        'Lote vinculado não encontrado.'
+      );
+
+      const totalMovimentacoes = await EquipamentoRepository.contarMovimentacoes(id, tx);
+      EquipamentoRules.exigirPodeExcluir(equipamento, totalMovimentacoes, lote);
+
+      await EquipamentoRepository.delete(id, tx);
+    });
   }
 }

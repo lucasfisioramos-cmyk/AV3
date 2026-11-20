@@ -17,3 +17,6 @@ export const loginResponseSchema = envelope(
   })
 );
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+export const logoutResponseSchema = envelope(z.null().optional());
+export type LogoutResponse = z.infer<typeof logoutResponseSchema>;

@@ -17,6 +17,11 @@ export interface Env {
   JWT_ISSUER: string;
   JWT_AUDIENCE: string;
   LOG_LEVEL: LogLevel;
+  RATE_LIMIT_GLOBAL_MAX: number;
+  RATE_LIMIT_GLOBAL_TIME_WINDOW: string;
+  RATE_LIMIT_LOGIN_MAX: number;
+  RATE_LIMIT_LOGIN_TIME_WINDOW: string;
+  CORS_ORIGINS: string[];
 }
 
 export class EnvValidationError extends Error {
@@ -105,6 +110,68 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   // HOST (opcional, padrão 0.0.0.0)
   const host = isBlank(source.HOST) ? '0.0.0.0' : source.HOST!.trim();
 
+  // RATE LIMITING
+  // Global (padrão: 100 requisições / 1 minuto fora de teste, 10.000 em teste)
+  let rateLimitGlobalMax = nodeEnv === 'test' ? 10_000 : 100;
+  const rateLimitGlobalMaxRaw = source.RATE_LIMIT_GLOBAL_MAX?.trim();
+  if (!isBlank(rateLimitGlobalMaxRaw)) {
+    const parsed = Number(rateLimitGlobalMaxRaw);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      issues.push(`RATE_LIMIT_GLOBAL_MAX "${rateLimitGlobalMaxRaw}" é inválido. Informe um inteiro positivo.`);
+    } else {
+      rateLimitGlobalMax = parsed;
+    }
+  }
+
+  const rateLimitGlobalTimeWindow = isBlank(source.RATE_LIMIT_GLOBAL_TIME_WINDOW)
+    ? '1 minute'
+    : source.RATE_LIMIT_GLOBAL_TIME_WINDOW!.trim();
+
+  // Login (padrão: 5 tentativas / 1 minuto fora de teste, 10.000 em teste se não informado)
+  let rateLimitLoginMax = nodeEnv === 'test' ? 10_000 : 5;
+  const rateLimitLoginMaxRaw = source.RATE_LIMIT_LOGIN_MAX?.trim();
+  if (!isBlank(rateLimitLoginMaxRaw)) {
+    const parsed = Number(rateLimitLoginMaxRaw);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      issues.push(`RATE_LIMIT_LOGIN_MAX "${rateLimitLoginMaxRaw}" é inválido. Informe um inteiro positivo.`);
+    } else {
+      rateLimitLoginMax = parsed;
+    }
+  }
+
+  const rateLimitLoginTimeWindow = isBlank(source.RATE_LIMIT_LOGIN_TIME_WINDOW)
+    ? '1 minute'
+    : source.RATE_LIMIT_LOGIN_TIME_WINDOW!.trim();
+
+  // CORS_ORIGINS
+  // Em produção: obrigatória (lista separada por vírgula).
+  // Em dev/teste: se omitida, assume padrão permissivo ['*'].
+  let corsOrigins: string[] = ['*'];
+  const corsOriginsRaw = source.CORS_ORIGINS?.trim();
+
+  if (nodeEnv === 'production') {
+    if (isBlank(corsOriginsRaw)) {
+      issues.push('CORS_ORIGINS é obrigatória em produção (informe uma ou mais origens separadas por vírgula).');
+    } else {
+      const origens = corsOriginsRaw
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean);
+
+      if (origens.length === 0 || origens.includes('*')) {
+        issues.push('CORS_ORIGINS em produção deve conter origens explícitas e não pode ser "*".');
+      } else {
+        corsOrigins = origens;
+      }
+    }
+  } else if (!isBlank(corsOriginsRaw)) {
+    corsOrigins = corsOriginsRaw
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+    if (corsOrigins.length === 0) corsOrigins = ['*'];
+  }
+
   if (issues.length > 0) {
     throw new EnvValidationError(issues);
   }
@@ -119,5 +186,10 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     JWT_ISSUER: jwtIssuer,
     JWT_AUDIENCE: jwtAudience,
     LOG_LEVEL: logLevel,
+    RATE_LIMIT_GLOBAL_MAX: rateLimitGlobalMax,
+    RATE_LIMIT_GLOBAL_TIME_WINDOW: rateLimitGlobalTimeWindow,
+    RATE_LIMIT_LOGIN_MAX: rateLimitLoginMax,
+    RATE_LIMIT_LOGIN_TIME_WINDOW: rateLimitLoginTimeWindow,
+    CORS_ORIGINS: corsOrigins,
   };
 }

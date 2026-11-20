@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { envelope, type IdParams } from './common.schema.js';
+import { envelope, listEnvelope, paginacaoQuerySchema, type IdParams } from './common.schema.js';
 import {
   equipamentoSchema,
   estadoFisicoSchema,
@@ -40,16 +40,40 @@ export const alterarEstadoFisicoBodySchema = z.object({
 });
 export type AlterarEstadoFisicoBody = z.infer<typeof alterarEstadoFisicoBodySchema>;
 
+export const editarEquipamentoBodySchema = z
+  .object({
+    marca: z.string().trim().min(1).max(100).optional(),
+    modelo: z.string().trim().min(1).max(100).optional(),
+    anoFabricacao: z.number().int().min(1900).optional(),
+    pesoQuilogramas: z.number().positive().optional(),
+  })
+  .refine((body) => Object.values(body).some((v) => v !== undefined), {
+    message: 'Informe ao menos um campo para atualização (marca, modelo, anoFabricacao ou pesoQuilogramas).',
+  });
+export type EditarEquipamentoBody = z.infer<typeof editarEquipamentoBodySchema>;
+
 export const rastrearParamsSchema = z.object({ identificador: z.string().trim().min(1).max(100) });
 export type RastrearParams = z.infer<typeof rastrearParamsSchema>;
+
+export const listarEquipamentosQuerySchema = paginacaoQuerySchema.extend({
+  loteId: z.uuid().optional(),
+  tipo: tipoEquipamentoSchema.optional(),
+  statusRastreamento: statusRastreamentoSchema.optional(),
+});
+export type ListarEquipamentosQuery = z.infer<typeof listarEquipamentosQuerySchema>;
 
 export type CriarEquipamentoRoute = { Body: CriarEquipamentoBody };
 export type MovimentarEquipamentoRoute = { Params: IdParams; Body: MovimentarEquipamentoBody };
 export type AlterarEstadoFisicoRoute = { Params: IdParams; Body: AlterarEstadoFisicoBody };
+export type EditarEquipamentoRoute = { Params: IdParams; Body: EditarEquipamentoBody };
+export type ExcluirEquipamentoRoute = { Params: IdParams };
+export type ListarEquipamentosRoute = { Querystring: ListarEquipamentosQuery };
 export type RastrearEquipamentoRoute = { Params: RastrearParams };
 
 // ---- Responses ----
 export const equipamentoResponseSchema = envelope(equipamentoSchema);
+export const equipamentoExcluidoResponseSchema = envelope(z.null());
+export const listarEquipamentosResponseSchema = listEnvelope(equipamentoSchema);
 
 export const movimentarEquipamentoResponseSchema = envelope(
   z.object({

@@ -1,4 +1,4 @@
-import { ConflictError } from '../../errors/app-error.js';
+import { ConflictError, RegraDeNegocioError } from '../../errors/app-error.js';
 import { exigirValido } from '../shared/guards.js';
 import { validarCNPJ, validarEmail } from '../validators/index.js';
 
@@ -13,5 +13,17 @@ export const OrganizacaoRules = {
 
   garantirCnpjDisponivel(cnpj: string, existente: unknown): void {
     if (existente) throw new ConflictError(`Já existe uma organização cadastrada com o CNPJ ${cnpj}.`);
+  },
+
+  exigirOrganizacaoAtiva(organizacao: { ativo: boolean }, acao = 'esta operação'): void {
+    if (!organizacao.ativo) {
+      throw new RegraDeNegocioError(`Organização inativa não pode ${acao}.`);
+    }
+  },
+
+  exigirPodeDesativar(organizacao: { ativo: boolean }): void {
+    if (!organizacao.ativo) {
+      throw new RegraDeNegocioError('A organização já se encontra inativa.');
+    }
   },
 };

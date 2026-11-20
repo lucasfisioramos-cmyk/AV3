@@ -20,7 +20,16 @@ async function acessar(token?: string) {
 
 describe('validação do JWT (tokens forjados ou inválidos -> 401)', () => {
   const agora = () => Math.floor(Date.now() / 1000);
-  const base = (id: string) => ({ sub: id, usuario: 'adm', papel: 'ADMINISTRADOR', iss: env.JWT_ISSUER, aud: env.JWT_AUDIENCE, iat: agora(), exp: agora() + 600 });
+  const base = (id: string) => ({
+    sub: id,
+    usuario: 'adm',
+    papel: 'ADMINISTRADOR',
+    jti: '00000000-0000-4000-8000-000000000001',
+    iss: env.JWT_ISSUER,
+    aud: env.JWT_AUDIENCE,
+    iat: agora(),
+    exp: agora() + 600,
+  });
 
   it('o token forjado "bem formado" com o segredo correto é aceito (controle do teste)', async () => {
     const u = await db.semear.usuario({ papel: 'ADMINISTRADOR' });
@@ -65,6 +74,7 @@ describe('validação do JWT (tokens forjados ou inválidos -> 401)', () => {
     ['sem aud', { aud: undefined }],
     ['sem sub', { sub: undefined }],
     ['sem usuario', { usuario: undefined }],
+    ['sem jti', { jti: undefined }],
     ['papel inexistente', { papel: 'ROOT' }],
     ['sem papel', { papel: undefined }],
   ])('401: %s', async (_n, alteracao) => {

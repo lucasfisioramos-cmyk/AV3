@@ -24,6 +24,23 @@ export const organizacaoSchema = z.object({
 
 export const organizacaoResumoSchema = organizacaoSchema.pick({ id: true, razaoSocial: true, cnpj: true });
 
+export const contratoSchema = z.object({
+  id: z.string(),
+  organizacaoId: z.string(),
+  dataAssinatura: dateTimeSchema,
+  dataVencimento: dateTimeSchema,
+  clausulas: z.array(z.string()),
+  valorMensal: z.number().positive(),
+  renovacaoAutomatica: z.boolean(),
+  ativo: z.boolean(),
+  createdAt: dateTimeSchema,
+  updatedAt: dateTimeSchema,
+});
+
+export const organizacaoDetalheSchema = organizacaoSchema.extend({
+  contratoVigente: contratoSchema.nullable(),
+});
+
 export const loteSchema = z.object({
   id: z.string(),
   dataEntrada: dateTimeSchema,

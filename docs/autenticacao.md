@@ -49,13 +49,15 @@ Papéis: `ADMINISTRADOR`, `OPERADOR_CADASTRO`, `GESTOR_ALMOXARIFADO`, `AUDITOR`.
 | --- | :-: | :-: | :-: | :-: |
 | Login, health | público | público | público | público |
 | Trocar a própria senha | ✅ | ✅ | ✅ | ✅ |
-| Criar, editar e remover usuários | ✅ | ❌ | ❌ | ❌ |
-| Listar organizações | ✅ | ✅ | ✅ | ✅ |
-| Criar organização | ✅ | ✅ | ❌ | ❌ |
+| Listar, criar, editar e remover usuários | ✅ | ❌ | ❌ | ❌ |
+| Listar e consultar organizações | ✅ | ✅ | ✅ | ✅ |
+| Criar, editar e desativar organizações | ✅ | ✅ | ❌ | ❌ |
+| Gerenciar contratos de organização (criar, renovar, encerrar) | ✅ | ✅ | ❌ | ❌ |
+| Consultar contratos de organização | ✅ | ✅ | ✅ | ✅ |
 | Listar e consultar lotes | ✅ | ✅ | ✅ | ✅ |
-| Criar lote | ✅ | ❌ | ✅ | ❌ |
-| Cadastrar, movimentar e alterar estado de equipamento | ✅ | ✅ | ✅ | ❌ |
-| Rastrear equipamento | ✅ | ✅ | ✅ | ✅ |
+| Criar, transitar status, editar e excluir lotes | ✅ | ❌ | ✅ | ❌ |
+| Cadastrar, movimentar, alterar estado, editar e excluir equipamento | ✅ | ✅ | ✅ | ❌ |
+| Listar e rastrear equipamentos | ✅ | ✅ | ✅ | ✅ |
 | Relatórios | ✅ | ❌ | ✅ | ✅ |
 
 Regras adicionais no serviço (`usuario.rules.ts`): `PUT /usuarios/:id` aceita não administradores **apenas sobre o próprio usuário**, e eles só podem alterar a própria senha (nome de usuário e papel exigem administrador). O sistema também nunca fica sem administrador (veja [regras-de-negocio.md](regras-de-negocio.md)).

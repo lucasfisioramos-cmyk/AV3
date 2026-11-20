@@ -1,7 +1,8 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../persistence/prisma.js';
 import type { Transacao } from '../persistence/transaction.js';
 import type { EstadoFisico, StatusRastreamento, TipoEquipamento } from '../domain/shared/enums.js';
-import type { CrudRepository } from './base.repository.js';
+import type { CrudRepository, PaginacaoFiltro } from './base.repository.js';
 import type { Equipamento, Lote, Movimentacao, OrganizacaoResumo } from './entities.js';
 
 export interface CriarEquipamentoData {
@@ -20,12 +21,15 @@ export interface CriarEquipamentoData {
 export interface AtualizarEquipamentoData {
   marca?: string;
   modelo?: string;
+  anoFabricacao?: number;
+  pesoQuilogramas?: number;
   estadoFisico?: EstadoFisico;
   statusRastreamento?: StatusRastreamento;
 }
 
-export interface EquipamentoFiltro {
+export interface EquipamentoFiltro extends PaginacaoFiltro {
   loteId?: string;
+  tipo?: TipoEquipamento;
   statusRastreamento?: StatusRastreamento;
 }
 
@@ -58,6 +62,7 @@ export interface EquipamentoRepository
   ): Promise<Equipamento | null>;
   /** O histórico pertence ao agregado Equipamento; não há repositório próprio de Movimentacao. */
   registrarMovimentacao(data: RegistrarMovimentacaoData, tx?: Transacao): Promise<Movimentacao>;
+  contarMovimentacoes(equipamentoId: string, tx?: Transacao): Promise<number>;
 }
 
 class PrismaEquipamentoRepository implements EquipamentoRepository {
@@ -65,8 +70,21 @@ class PrismaEquipamentoRepository implements EquipamentoRepository {
     return (tx ?? prisma).equipamento.findUnique({ where: { id } });
   }
 
+  private montarWhere(filtro: EquipamentoFiltro): Prisma.EquipamentoWhereInput {
+    const where: Prisma.EquipamentoWhereInput = {};
+    if (filtro.loteId) where.loteId = filtro.loteId;
+    if (filtro.tipo) where.tipo = filtro.tipo;
+    if (filtro.statusRastreamento) where.statusRastreamento = filtro.statusRastreamento;
+    return where;
+  }
+
   findAll(filtro: EquipamentoFiltro = {}, tx?: Transacao) {
-    return (tx ?? prisma).equipamento.findMany({ where: filtro, orderBy: { createdAt: 'desc' } });
+    return (tx ?? prisma).equipamento.findMany({
+      where: this.montarWhere(filtro),
+      orderBy: { createdAt: 'desc' },
+      skip: filtro.skip,
+      take: filtro.take,
+    });
   }
 
   findDetalheByIdentificador(identificador: string, tx?: Transacao) {
@@ -108,11 +126,15 @@ class PrismaEquipamentoRepository implements EquipamentoRepository {
   }
 
   count(filtro: EquipamentoFiltro = {}, tx?: Transacao) {
-    return (tx ?? prisma).equipamento.count({ where: filtro });
+    return (tx ?? prisma).equipamento.count({ where: this.montarWhere(filtro) });
   }
 
   registrarMovimentacao(data: RegistrarMovimentacaoData, tx?: Transacao) {
     return (tx ?? prisma).movimentacao.create({ data });
+  }
+
+  contarMovimentacoes(equipamentoId: string, tx?: Transacao) {
+    return (tx ?? prisma).movimentacao.count({ where: { equipamentoId } });
   }
 }
 

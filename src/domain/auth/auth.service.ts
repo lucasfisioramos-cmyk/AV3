@@ -1,5 +1,6 @@
 import type { PapelUsuario } from '../shared/enums.js';
 import { UsuarioRepository } from '../../repositories/usuario.repository.js';
+import { TokenRevogadoRepository } from '../../repositories/token-revogado.repository.js';
 import { PasswordHasher } from '../../security/hasher.js';
 import { AuthRules } from './auth.rules.js';
 
@@ -8,6 +9,12 @@ export interface UsuarioAutenticado {
   id: string;
   usuario: string;
   papel: PapelUsuario;
+}
+
+export interface RevogarTokenInput {
+  jti: string;
+  expiresAt: Date;
+  motivo?: string;
 }
 
 export class AuthService {
@@ -33,5 +40,19 @@ export class AuthService {
     });
 
     return { id: credencial.id, usuario: credencial.usuario, papel: credencial.papel };
+  }
+
+  // Revoga o token JWT informado gravando seu jti na lista de revogações.
+  static async revogarToken(input: RevogarTokenInput): Promise<void> {
+    await TokenRevogadoRepository.criar({
+      jti: input.jti,
+      expiresAt: input.expiresAt,
+      motivo: input.motivo ?? 'LOGOUT',
+    });
+  }
+
+  // Limpa tokens revogados cujo tempo de expiração já passou.
+  static async limparTokensExpirados(dataReferencia?: Date): Promise<number> {
+    return TokenRevogadoRepository.limparExpirados(dataReferencia);
   }
 }

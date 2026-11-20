@@ -1,8 +1,9 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../persistence/prisma.js';
 import type { Transacao } from '../persistence/transaction.js';
 import type { StatusLote } from '../domain/shared/enums.js';
-import type { CrudRepository } from './base.repository.js';
+import { ConflictError } from '../errors/app-error.js';
+import type { CrudRepository, PaginacaoFiltro } from './base.repository.js';
 import type { Equipamento, Lote, OrganizacaoResumo } from './entities.js';
 
 export interface CriarLoteData {
@@ -20,9 +21,11 @@ export interface AtualizarLoteData {
   statusProcessamento?: StatusLote;
 }
 
-export interface LoteFiltro {
+export interface LoteFiltro extends PaginacaoFiltro {
   organizacaoId?: string;
   statusProcessamento?: StatusLote;
+  dataEntradaInicio?: Date;
+  dataEntradaFim?: Date;
 }
 
 /** Item de listagem: lote + organização resumida + total de equipamentos. */
@@ -50,22 +53,41 @@ const SELECT_ORGANIZACAO_RESUMO = {
 } as const satisfies Prisma.OrganizacaoSelect;
 
 class PrismaLoteRepository implements LoteRepository {
+  private montarWhere(filtro: LoteFiltro): Prisma.LoteWhereInput {
+    const where: Prisma.LoteWhereInput = {};
+    if (filtro.organizacaoId) where.organizacaoId = filtro.organizacaoId;
+    if (filtro.statusProcessamento) where.statusProcessamento = filtro.statusProcessamento;
+    if (filtro.dataEntradaInicio || filtro.dataEntradaFim) {
+      where.dataEntrada = {};
+      if (filtro.dataEntradaInicio) where.dataEntrada.gte = filtro.dataEntradaInicio;
+      if (filtro.dataEntradaFim) where.dataEntrada.lte = filtro.dataEntradaFim;
+    }
+    return where;
+  }
+
   findById(id: string, tx?: Transacao) {
     return (tx ?? prisma).lote.findUnique({ where: { id } });
   }
 
   findAll(filtro: LoteFiltro = {}, tx?: Transacao) {
-    return (tx ?? prisma).lote.findMany({ where: filtro, orderBy: { createdAt: 'desc' } });
+    return (tx ?? prisma).lote.findMany({
+      where: this.montarWhere(filtro),
+      orderBy: { createdAt: 'desc' },
+      skip: filtro.skip,
+      take: filtro.take,
+    });
   }
 
   async listarComResumo(filtro: LoteFiltro = {}, tx?: Transacao): Promise<LoteComResumo[]> {
     const lotes = await (tx ?? prisma).lote.findMany({
-      where: filtro,
+      where: this.montarWhere(filtro),
       include: {
         organizacao: { select: SELECT_ORGANIZACAO_RESUMO },
         _count: { select: { equipamentos: true } },
       },
       orderBy: { createdAt: 'desc' },
+      skip: filtro.skip,
+      take: filtro.take,
     });
 
     // Converte o formato do Prisma (_count) para o vocabulário da aplicação.
@@ -86,8 +108,17 @@ class PrismaLoteRepository implements LoteRepository {
     return (tx ?? prisma).lote.findFirst({ where: { notaFiscal, organizacaoId } });
   }
 
-  create(data: CriarLoteData, tx?: Transacao) {
-    return (tx ?? prisma).lote.create({ data });
+  async create(data: CriarLoteData, tx?: Transacao) {
+    try {
+      return await (tx ?? prisma).lote.create({ data });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictError(
+          `Já existe um lote cadastrado com a Nota Fiscal "${data.notaFiscal}" para esta organização.`
+        );
+      }
+      throw error;
+    }
   }
 
   update(id: string, data: AtualizarLoteData, tx?: Transacao) {
@@ -99,7 +130,7 @@ class PrismaLoteRepository implements LoteRepository {
   }
 
   count(filtro: LoteFiltro = {}, tx?: Transacao) {
-    return (tx ?? prisma).lote.count({ where: filtro });
+    return (tx ?? prisma).lote.count({ where: this.montarWhere(filtro) });
   }
 }
 

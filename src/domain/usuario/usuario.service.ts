@@ -1,7 +1,9 @@
 import { PapelUsuario } from '../shared/enums.js';
-import { UsuarioRepository } from '../../repositories/usuario.repository.js';
+import { UsuarioRepository, type AtualizarUsuarioData } from '../../repositories/usuario.repository.js';
+import { TokenRevogadoRepository } from '../../repositories/token-revogado.repository.js';
 import { PasswordHasher } from '../../security/hasher.js';
 import { executarEmTransacao } from '../../persistence/transaction.js';
+import { UnauthorizedError } from '../../errors/app-error.js';
 import { exigirEncontrado } from '../shared/guards.js';
 import { UsuarioRules } from './usuario.rules.js';
 
@@ -19,7 +21,35 @@ export interface EditarUsuarioInput {
   novoPapel?: PapelUsuario;
 }
 
+export interface AlterarMinhaSenhaInput {
+  idUsuario: string;
+  senhaAtual: string;
+  novaSenha: string;
+  jti?: string;
+  exp?: number;
+}
+
+export interface ListarUsuariosInput {
+  papel?: PapelUsuario;
+  page?: number;
+  limit?: number;
+}
+
 export class UsuarioService {
+  static async listarUsuarios(params: ListarUsuariosInput = {}) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const filtro = { papel: params.papel, skip, take: limit };
+    const [itens, total] = await Promise.all([
+      UsuarioRepository.findAll(filtro),
+      UsuarioRepository.count({ papel: params.papel }),
+    ]);
+
+    return { itens, total, page, limit };
+  }
+
   // 1. Criar novo usuário
   // Transação: NÃO. Escrita única; a unicidade é garantida pela constraint do banco
   // (violação -> P2002 -> 409 no handler global).
@@ -53,11 +83,7 @@ export class UsuarioService {
       'Usuário não encontrado.'
     );
 
-    const dadosAtualizacao: {
-      usuario?: string;
-      hashSenha?: string;
-      papel?: PapelUsuario;
-    } = {};
+    const dadosAtualizacao: AtualizarUsuarioData = {};
     let rebaixaAdministrador = false;
 
     if (params.novoUsuario && params.novoUsuario !== usuarioAlvo.usuario) {
@@ -72,12 +98,14 @@ export class UsuarioService {
       UsuarioRules.exigirAdminParaAlterarPapel(ehAdmin);
       rebaixaAdministrador = UsuarioRules.ehRebaixamentoDeAdministrador(usuarioAlvo, params.novoPapel);
       dadosAtualizacao.papel = params.novoPapel;
+      dadosAtualizacao.tokensValidosApos = new Date();
     }
 
     if (params.novaSenha && params.novaSenha.trim().length > 0) {
       // A senha não pode conter o nome de usuário que ficará valendo após a edição.
       UsuarioRules.exigirSenhaValida(params.novaSenha, { usuario: dadosAtualizacao.usuario ?? usuarioAlvo.usuario });
       dadosAtualizacao.hashSenha = await PasswordHasher.hashPassword(params.novaSenha);
+      dadosAtualizacao.tokensValidosApos = new Date();
     }
 
     UsuarioRules.exigirAlgumaAlteracao(dadosAtualizacao);
@@ -120,5 +148,41 @@ export class UsuarioService {
       },
       { isolamento: 'serializavel' }
     );
+  }
+
+  // 4. Alterar a própria senha com validação da senha atual
+  // Transação: NÃO. Escrita única sem corrida entre dependências.
+  static async alterarMinhaSenha(params: AlterarMinhaSenhaInput) {
+    UsuarioRules.garantirNovaSenhaDiferente(params.senhaAtual, params.novaSenha);
+
+    const credencial = exigirEncontrado(
+      await UsuarioRepository.findCredencialById(params.idUsuario),
+      'Usuário não encontrado.'
+    );
+
+    const confere = await PasswordHasher.comparePassword(params.senhaAtual, credencial.hashSenha);
+    if (!confere) {
+      throw new UnauthorizedError('Senha atual incorreta.');
+    }
+
+    UsuarioRules.exigirSenhaValida(params.novaSenha, { usuario: credencial.usuario });
+
+    const hashSenha = await PasswordHasher.hashPassword(params.novaSenha);
+    const agora = new Date();
+
+    const resultado = await UsuarioRepository.update(params.idUsuario, {
+      hashSenha,
+      tokensValidosApos: agora,
+    });
+
+    if (params.jti && params.exp) {
+      await TokenRevogadoRepository.criar({
+        jti: params.jti,
+        expiresAt: new Date(params.exp * 1000),
+        motivo: 'ALTERACAO_SENHA',
+      });
+    }
+
+    return resultado;
   }
 }

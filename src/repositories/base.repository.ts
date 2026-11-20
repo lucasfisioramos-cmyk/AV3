@@ -13,6 +13,11 @@ import type { Transacao } from '../persistence/transaction.js';
  *  - Leituras específicas de um caso de uso (detalhes, resumos) ficam em métodos nomeados
  *    à parte (ex.: `findDetalheById`), sem alterar o contrato abaixo.
  */
+export interface PaginacaoFiltro {
+  skip?: number;
+  take?: number;
+}
+
 export interface CrudRepository<Entity, CriarData, AtualizarData, Filtro = Record<string, never>> {
   findById(id: string, tx?: Transacao): Promise<Entity | null>;
   findAll(filtro?: Filtro, tx?: Transacao): Promise<Entity[]>;

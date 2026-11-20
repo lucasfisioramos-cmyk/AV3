@@ -6,13 +6,15 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PasswordHasher } from '../../src/security/hasher.js';
-import type { PapelUsuario, StatusLote, StatusRastreamento } from '../../src/domain/shared/enums.js';
-import type { Equipamento, Lote, Movimentacao, Organizacao, Usuario } from '../../src/repositories/entities.js';
-import type { EquipamentoRepository } from '../../src/repositories/equipamento.repository.js';
-import type { LoteRepository } from '../../src/repositories/lote.repository.js';
-import type { OrganizacaoRepository } from '../../src/repositories/organizacao.repository.js';
+import type { PapelUsuario, StatusLote, StatusRastreamento, TipoEquipamento } from '../../src/domain/shared/enums.js';
+import type { Contrato, Equipamento, Lote, Movimentacao, Organizacao, OrganizacaoDetalhe, TokenRevogado, Usuario } from '../../src/repositories/entities.js';
+import type { ContratoRepository } from '../../src/repositories/contrato.repository.js';
+import type { EquipamentoFiltro, EquipamentoRepository } from '../../src/repositories/equipamento.repository.js';
+import type { CriarLoteData, LoteFiltro, LoteRepository } from '../../src/repositories/lote.repository.js';
+import type { OrganizacaoFiltro, OrganizacaoRepository } from '../../src/repositories/organizacao.repository.js';
 import type { RelatorioRepository } from '../../src/repositories/relatorio.repository.js';
-import type { UsuarioRepository } from '../../src/repositories/usuario.repository.js';
+import type { TokenRevogadoRepository } from '../../src/repositories/token-revogado.repository.js';
+import type { UsuarioFiltro, UsuarioRepository } from '../../src/repositories/usuario.repository.js';
 
 export const SENHA_TESTE = 'Senha#Forte1';
 
@@ -28,9 +30,11 @@ export const obterHashSenhaTeste = () => (hashSenhaTeste ??= PasswordHasher.hash
 class BancoEmMemoria {
   usuarios = new Map<string, UsuarioRow>();
   organizacoes = new Map<string, Organizacao>();
+  contratos = new Map<string, Contrato>();
   lotes = new Map<string, Lote>();
   equipamentos = new Map<string, Equipamento>();
   movimentacoes = new Map<string, Movimentacao>();
+  tokensRevogados = new Map<string, TokenRevogado>();
 
   /** Opções de cada transação executada (permite verificar o isolamento usado). */
   transacoes: { isolamento?: string }[] = [];
@@ -41,7 +45,7 @@ class BancoEmMemoria {
   }
 
   private tabelas() {
-    return [this.usuarios, this.organizacoes, this.lotes, this.equipamentos, this.movimentacoes] as Map<string, unknown>[];
+    return [this.usuarios, this.organizacoes, this.contratos, this.lotes, this.equipamentos, this.movimentacoes, this.tokensRevogados] as Map<string, unknown>[];
   }
 
   /** Executa `fn` de forma atômica: qualquer erro restaura o estado anterior (rollback). */
@@ -63,16 +67,24 @@ class BancoEmMemoria {
 
   usuarioRepository: UsuarioRepository = {
     findById: async (id) => this.publico(this.usuarios.get(id)),
-    findAll: async (filtro) => [...this.usuarios.values()].filter((u) => !filtro?.papel || u.papel === filtro.papel).map((u) => this.publico(u)!),
+    findAll: async (filtro) =>
+      this.paginar(
+        [...this.usuarios.values()].filter((u) => !filtro?.papel || u.papel === filtro.papel).map((u) => this.publico(u)!),
+        filtro
+      ),
     findByUsuario: async (usuario) => this.publico([...this.usuarios.values()].find((u) => u.usuario === usuario)),
     findCredencialByUsuario: async (usuario) => {
       const u = [...this.usuarios.values()].find((x) => x.usuario === usuario);
       return u ? { id: u.id, usuario: u.usuario, papel: u.papel, hashSenha: u.hashSenha } : null;
     },
+    findCredencialById: async (id) => {
+      const u = this.usuarios.get(id);
+      return u ? { id: u.id, usuario: u.usuario, papel: u.papel, hashSenha: u.hashSenha } : null;
+    },
     create: async (data) => {
       if ([...this.usuarios.values()].some((u) => u.usuario === data.usuario)) throw erroPrisma('P2002', { target: ['usuario'] });
       const agora = new Date();
-      const row: UsuarioRow = { id: randomUUID(), ultimoAcesso: null, createdAt: agora, updatedAt: agora, ...data };
+      const row: UsuarioRow = { id: randomUUID(), ultimoAcesso: null, tokensValidosApos: null, createdAt: agora, updatedAt: agora, ...data };
       this.usuarios.set(row.id, row);
       return this.publico(row)!;
     },
@@ -89,9 +101,36 @@ class BancoEmMemoria {
     count: async (filtro) => [...this.usuarios.values()].filter((u) => !filtro?.papel || u.papel === filtro.papel).length,
   };
 
+  tokenRevogadoRepository: TokenRevogadoRepository = {
+    criar: async (data) => {
+      const agora = new Date();
+      const item: TokenRevogado = { ...data, createdAt: agora };
+      this.tokensRevogados.set(item.jti, item);
+      return item;
+    },
+    findByJti: async (jti) => this.tokensRevogados.get(jti) ?? null,
+    isRevogado: async (jti) => this.tokensRevogados.has(jti),
+    limparExpirados: async (dataReferencia = new Date()) => {
+      let removidos = 0;
+      for (const [jti, item] of this.tokensRevogados.entries()) {
+        if (item.expiresAt < dataReferencia) {
+          this.tokensRevogados.delete(jti);
+          removidos++;
+        }
+      }
+      return removidos;
+    },
+  };
+
   organizacaoRepository: OrganizacaoRepository = {
     findById: async (id) => this.organizacoes.get(id) ?? null,
-    findAll: async (filtro) => [...this.organizacoes.values()].filter((o) => filtro?.ativo === undefined || o.ativo === filtro.ativo),
+    findDetalheById: async (id) => {
+      const org = this.organizacoes.get(id);
+      if (!org) return null;
+      const contrato = [...this.contratos.values()].find((c) => c.organizacaoId === id && c.ativo) ?? null;
+      return { ...org, contratoVigente: contrato };
+    },
+    findAll: async (filtro) => this.paginar([...this.organizacoes.values()].filter((o) => this.casaOrg(o, filtro)), filtro),
     findByCnpj: async (cnpj) => [...this.organizacoes.values()].find((o) => o.cnpj === cnpj) ?? null,
     create: async (data) => {
       if ([...this.organizacoes.values()].some((o) => o.cnpj === data.cnpj)) throw erroPrisma('P2002', { target: ['cnpj'] });
@@ -110,20 +149,58 @@ class BancoEmMemoria {
     delete: async (id) => {
       if (!this.organizacoes.delete(id)) throw erroPrisma('P2025');
     },
-    count: async (filtro) => [...this.organizacoes.values()].filter((o) => filtro?.ativo === undefined || o.ativo === filtro.ativo).length,
+    count: async (filtro) => [...this.organizacoes.values()].filter((o) => this.casaOrg(o, filtro)).length,
+  };
+
+  contratoRepository: ContratoRepository = {
+    findById: async (id) => this.contratos.get(id) ?? null,
+    findVigenteByOrganizacaoId: async (organizacaoId) =>
+      [...this.contratos.values()].find((c) => c.organizacaoId === organizacaoId && c.ativo) ?? null,
+    findAllByOrganizacaoId: async (organizacaoId) =>
+      [...this.contratos.values()].filter((c) => c.organizacaoId === organizacaoId),
+    create: async (data) => {
+      const ativo = data.ativo ?? true;
+      if (ativo && [...this.contratos.values()].some((c) => c.organizacaoId === data.organizacaoId && c.ativo)) {
+        throw erroPrisma('P2002', { target: ['organizacaoId', 'ativo'] });
+      }
+      const agora = new Date();
+      const c: Contrato = {
+        id: randomUUID(),
+        renovacaoAutomatica: data.renovacaoAutomatica ?? true,
+        ativo,
+        createdAt: agora,
+        updatedAt: agora,
+        ...data,
+      };
+      this.contratos.set(c.id, c);
+      return c;
+    },
+    update: async (id, data) => {
+      const atual = this.contratos.get(id);
+      if (!atual) throw erroPrisma('P2025');
+      const novo: Contrato = { ...atual, ...data, updatedAt: new Date() };
+      this.contratos.set(id, novo);
+      return novo;
+    },
+    desativar: async (id) => {
+      return this.contratoRepository.update(id, { ativo: false });
+    },
   };
 
   loteRepository: LoteRepository = {
     findById: async (id) => this.lotes.get(id) ?? null,
-    findAll: async (filtro) => [...this.lotes.values()].filter((l) => this.casaLote(l, filtro)),
+    findAll: async (filtro) => this.paginar([...this.lotes.values()].filter((l) => this.casaLote(l, filtro)), filtro),
     listarComResumo: async (filtro) =>
-      [...this.lotes.values()]
-        .filter((l) => this.casaLote(l, filtro))
-        .map((l) => ({
-          ...l,
-          organizacao: this.resumoOrg(l.organizacaoId),
-          totalEquipamentos: [...this.equipamentos.values()].filter((e) => e.loteId === l.id).length,
-        })),
+      this.paginar(
+        [...this.lotes.values()]
+          .filter((l) => this.casaLote(l, filtro))
+          .map((l) => ({
+            ...l,
+            organizacao: this.resumoOrg(l.organizacaoId),
+            totalEquipamentos: [...this.equipamentos.values()].filter((e) => e.loteId === l.id).length,
+          })),
+        filtro
+      ),
     findDetalheById: async (id) => {
       const lote = this.lotes.get(id);
       if (!lote) return null;
@@ -164,7 +241,7 @@ class BancoEmMemoria {
 
   equipamentoRepository: EquipamentoRepository = {
     findById: async (id) => this.equipamentos.get(id) ?? null,
-    findAll: async (filtro) => [...this.equipamentos.values()].filter((e) => this.casaEquip(e, filtro)),
+    findAll: async (filtro) => this.paginar([...this.equipamentos.values()].filter((e) => this.casaEquip(e, filtro)), filtro),
     findDetalheByIdentificador: async (identificador) => {
       const e = [...this.equipamentos.values()].find((x) => x.id === identificador || x.codigoBarrasInterno === identificador);
       if (!e) return null;
@@ -208,6 +285,8 @@ class BancoEmMemoria {
       this.movimentacoes.set(mov.id, mov);
       return mov;
     },
+    contarMovimentacoes: async (equipamentoId) =>
+      [...this.movimentacoes.values()].filter((m) => m.equipamentoId === equipamentoId).length,
   };
 
   relatorioRepository: RelatorioRepository = {
@@ -241,12 +320,26 @@ class BancoEmMemoria {
         email: 'contato@reciclatech.com',
         ...dados,
       }),
-    lote: async (organizacaoId: string, dados: { statusProcessamento?: StatusLote; notaFiscal?: string } = {}) =>
+    contrato: async (organizacaoId: string, dados: Partial<Contrato> = {}) => {
+      const agora = new Date();
+      return this.contratoRepository.create({
+        organizacaoId,
+        dataAssinatura: dados.dataAssinatura ?? agora,
+        dataVencimento: dados.dataVencimento ?? new Date(agora.getTime() + 365 * 24 * 3600 * 1000),
+        clausulas: dados.clausulas ?? ['Cláusula padrão de reciclagem e tratamento de resíduos.'],
+        valorMensal: dados.valorMensal ?? 1500.0,
+        renovacaoAutomatica: dados.renovacaoAutomatica ?? true,
+        ativo: dados.ativo ?? true,
+      });
+    },
+    lote: async (organizacaoId: string, dados: Partial<CriarLoteData> = {}) =>
       this.loteRepository.create({
         organizacaoId,
         notaFiscal: dados.notaFiscal ?? `NF-${randomUUID().slice(0, 6)}`,
-        transportadora: 'Transportes Verde',
+        transportadora: dados.transportadora ?? 'Transportes Verde',
         statusProcessamento: dados.statusProcessamento,
+        observacoes: dados.observacoes,
+        dataEntrada: dados.dataEntrada,
       }),
     equipamento: async (loteId: string, dados: Partial<Equipamento> = {}) => {
       const posicao = await this.equipamentoRepository.count({ loteId });
@@ -277,11 +370,29 @@ class BancoEmMemoria {
     const o = this.organizacoes.get(id)!;
     return { id: o.id, razaoSocial: o.razaoSocial, cnpj: o.cnpj };
   }
-  private casaLote(l: Lote, f?: { organizacaoId?: string; statusProcessamento?: StatusLote }) {
-    return (!f?.organizacaoId || l.organizacaoId === f.organizacaoId) && (!f?.statusProcessamento || l.statusProcessamento === f.statusProcessamento);
+  private paginar<T>(items: T[], f?: { skip?: number; take?: number }): T[] {
+    const skip = f?.skip ?? 0;
+    const take = f?.take;
+    return take !== undefined ? items.slice(skip, skip + take) : items.slice(skip);
   }
-  private casaEquip(e: Equipamento, f?: { loteId?: string; statusRastreamento?: StatusRastreamento }) {
-    return (!f?.loteId || e.loteId === f.loteId) && (!f?.statusRastreamento || e.statusRastreamento === f.statusRastreamento);
+  private casaOrg(o: Organizacao, f?: OrganizacaoFiltro) {
+    if (f?.ativo !== undefined && o.ativo !== f.ativo) return false;
+    if (f?.cnpj && !o.cnpj.includes(f.cnpj)) return false;
+    if (f?.razaoSocial && !o.razaoSocial.toLowerCase().includes(f.razaoSocial.toLowerCase())) return false;
+    return true;
+  }
+  private casaLote(l: Lote, f?: LoteFiltro) {
+    if (f?.organizacaoId && l.organizacaoId !== f.organizacaoId) return false;
+    if (f?.statusProcessamento && l.statusProcessamento !== f.statusProcessamento) return false;
+    if (f?.dataEntradaInicio && l.dataEntrada < f.dataEntradaInicio) return false;
+    if (f?.dataEntradaFim && l.dataEntrada > f.dataEntradaFim) return false;
+    return true;
+  }
+  private casaEquip(e: Equipamento, f?: EquipamentoFiltro) {
+    if (f?.loteId && e.loteId !== f.loteId) return false;
+    if (f?.statusRastreamento && e.statusRastreamento !== f.statusRastreamento) return false;
+    if (f?.tipo && e.tipo !== f.tipo) return false;
+    return true;
   }
   private metricas(lista: Equipamento[]) {
     return { totalEquipamentos: lista.length, pesoTotalKg: lista.reduce((s, e) => s + e.pesoQuilogramas, 0) };

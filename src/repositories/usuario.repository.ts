@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../persistence/prisma.js';
 import type { Transacao } from '../persistence/transaction.js';
 import type { PapelUsuario } from '../domain/shared/enums.js';
-import type { CrudRepository } from './base.repository.js';
+import type { CrudRepository, PaginacaoFiltro } from './base.repository.js';
 import type { Usuario } from './entities.js';
 
 export interface UsuarioCredencial {
@@ -23,16 +23,18 @@ export interface AtualizarUsuarioData {
   hashSenha?: string;
   papel?: PapelUsuario;
   ultimoAcesso?: Date;
+  tokensValidosApos?: Date | null;
 }
 
-export interface UsuarioFiltro {
+export interface UsuarioFiltro extends PaginacaoFiltro {
   papel?: PapelUsuario;
 }
 
 export interface UsuarioRepository extends CrudRepository<Usuario, CriarUsuarioData, AtualizarUsuarioData, UsuarioFiltro> {
   findByUsuario(usuario: string, tx?: Transacao): Promise<Usuario | null>;
-  /** ÚNICO caminho que devolve o hash da senha; use apenas para autenticar. */
+  /** ÚNICOS caminhos que devolvem o hash da senha; use apenas para autenticar ou validar troca de senha. */
   findCredencialByUsuario(usuario: string, tx?: Transacao): Promise<UsuarioCredencial | null>;
+  findCredencialById(id: string, tx?: Transacao): Promise<UsuarioCredencial | null>;
 }
 
 // Campos devolvidos por padrão: sem hashSenha.
@@ -41,6 +43,7 @@ const SELECT_PUBLICO = {
   usuario: true,
   papel: true,
   ultimoAcesso: true,
+  tokensValidosApos: true,
   createdAt: true,
   updatedAt: true,
 } as const satisfies Prisma.UsuarioSelect;
@@ -61,7 +64,9 @@ class PrismaUsuarioRepository implements UsuarioRepository {
     return (tx ?? prisma).usuario.findMany({
       where: { papel: filtro.papel },
       select: SELECT_PUBLICO,
-      orderBy: { usuario: 'asc' },
+      orderBy: { createdAt: 'desc' },
+      skip: filtro.skip,
+      take: filtro.take,
     });
   }
 
@@ -71,6 +76,10 @@ class PrismaUsuarioRepository implements UsuarioRepository {
 
   findCredencialByUsuario(usuario: string, tx?: Transacao) {
     return (tx ?? prisma).usuario.findUnique({ where: { usuario }, select: SELECT_CREDENCIAL });
+  }
+
+  findCredencialById(id: string, tx?: Transacao) {
+    return (tx ?? prisma).usuario.findUnique({ where: { id }, select: SELECT_CREDENCIAL });
   }
 
   create(data: CriarUsuarioData, tx?: Transacao) {

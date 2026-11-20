@@ -18,12 +18,26 @@ export function envelope<T extends z.ZodType>(data: T) {
   });
 }
 
-/** Versão para listas, documentando meta.total. */
+export const paginacaoQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type PaginacaoQuery = z.infer<typeof paginacaoQuerySchema>;
+
+export const metaPaginacaoSchema = z.object({
+  total: z.number().int().min(0),
+  page: z.number().int().min(1),
+  limit: z.number().int().min(1),
+  totalPages: z.number().int().min(0),
+});
+export type MetaPaginacao = z.infer<typeof metaPaginacaoSchema>;
+
+/** Versão para listas, documentando meta com total, page, limit e totalPages. */
 export function listEnvelope<T extends z.ZodType>(item: T) {
   return z.object({
     data: z.array(item),
     message: z.string().optional(),
-    meta: z.object({ total: z.number().int() }),
+    meta: metaPaginacaoSchema,
   });
 }
 

@@ -6,12 +6,15 @@ import {
   alterarMinhaSenhaBodySchema,
   criarUsuarioBodySchema,
   editarUsuarioBodySchema,
+  listarUsuariosQuerySchema,
+  listarUsuariosResponseSchema,
   semConteudoResponseSchema,
   usuarioAtualizadoResponseSchema,
   usuarioCriadoResponseSchema,
   type AlterarMinhaSenhaRoute,
   type CriarUsuarioRoute,
   type EditarUsuarioRoute,
+  type ListarUsuariosRoute,
   type RemoverUsuarioRoute,
 } from '../schemas/usuario.schema.js';
 
@@ -35,6 +38,20 @@ export async function usuarioRoutes(app: FastifyInstance) {
   );
 
   // 🔒 Rotas exclusivas do ADMINISTRADOR
+  app.get<ListarUsuariosRoute>(
+    '/',
+    {
+      onRequest: apenasAdministradores,
+      schema: {
+        tags: ['Usuários'],
+        summary: 'Lista todos os usuários (somente administrador)',
+        querystring: listarUsuariosQuerySchema,
+        response: { 200: listarUsuariosResponseSchema, ...errors(401, 403) },
+      },
+    },
+    UsuarioController.index
+  );
+
   app.post<CriarUsuarioRoute>(
     '/',
     {

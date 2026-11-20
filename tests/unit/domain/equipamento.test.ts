@@ -138,6 +138,26 @@ describe('EquipamentoService', () => {
     await expect(EquipamentoService.alterarEstadoFisico({ id: 'x', novoEstado: 'NOVO', version: 0 })).rejects.toBeInstanceOf(NotFoundError);
   });
 
+  it('listarEquipamentos: lista com paginação padrão e filtros', async () => {
+    const org = await db.semear.organizacao();
+    const lote = await db.semear.lote(org.id);
+    await db.semear.equipamento(lote.id);
+    const padrao = await EquipamentoService.listarEquipamentos();
+    expect(padrao.page).toBe(1);
+    expect(padrao.limit).toBe(20);
+    expect(padrao.total).toBeGreaterThanOrEqual(1);
+
+    const filtrado = await EquipamentoService.listarEquipamentos({
+      page: 2,
+      limit: 5,
+      loteId: lote.id,
+      tipo: 'NOTEBOOK',
+      statusRastreamento: 'AGUARDANDO_TRIAGEM',
+    });
+    expect(filtrado.page).toBe(2);
+    expect(filtrado.limit).toBe(5);
+  });
+
   it('rastrear: por id ou por código de barras; inexistente -> 404; vazio -> regra', async () => {
     const org = await db.semear.organizacao();
     const lote = await db.semear.lote(org.id);
