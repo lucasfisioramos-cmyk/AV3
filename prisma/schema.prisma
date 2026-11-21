@@ -58,6 +58,23 @@ enum StatusRastreamento {
   BAIXA_DEFINITIVA
 }
 
+enum MetricType {
+  OPERATIONAL_EFFICIENCY
+  PROFITABILITY
+}
+
+enum ReportFormat {
+  CSV
+  JSON
+}
+
+enum ReportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 // ======================================================
 // ENTIDADES DE PERSISTÊNCIA (RELACIONAL)
 // ======================================================
@@ -182,4 +199,63 @@ model ConfiguracaoMestre {
   criadoEm    DateTime @default(now())
 
   @@map("configuracoes_mestre")
+}
+
+model ApiKey {
+  id          String      @id @default(uuid())
+  partnerName String
+  keyPrefix   String
+  keyHash     String      @unique
+  scopes      String[]
+  isActive    Boolean     @default(true)
+  rateLimit   Int         @default(100)
+  createdAt   DateTime    @default(now())
+  expiresAt   DateTime?
+  reportJobs  ReportJob[]
+
+  @@map("api_keys")
+}
+
+model AnalyticsHistory {
+  id           String     @id @default(uuid())
+  metricType   MetricType
+  dimension    String
+  payload      Json
+  calculatedAt DateTime   @default(now())
+
+  @@index([metricType, calculatedAt])
+  @@map("analytics_history")
+}
+
+model EquipmentRULPrediction {
+  id                String          @id @default(uuid())
+  tipoEquipamento   TipoEquipamento
+  marca             String
+  modelo            String
+  slope             Float
+  intercept         Float
+  estimatedDaysLeft Int
+  predictedEndDate  DateTime
+  createdAt         DateTime        @default(now())
+
+  @@index([marca, modelo, createdAt])
+  @@map("equipment_rul_predictions")
+}
+
+model ReportJob {
+  id          String          @id @default(uuid())
+  bullJobId   String?         @unique
+  apiKeyId    String
+  reportType  String
+  format      ReportFormat
+  status      ReportJobStatus @default(PENDING)
+  filePath    String?
+  errorReason String?
+  createdAt   DateTime        @default(now())
+  completedAt DateTime?
+
+  apiKey      ApiKey          @relation(fields: [apiKeyId], references: [id])
+
+  @@index([apiKeyId, createdAt])
+  @@map("report_jobs")
 }

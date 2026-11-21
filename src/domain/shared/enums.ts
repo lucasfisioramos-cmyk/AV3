@@ -5,7 +5,10 @@
  */
 export {
   EstadoFisico,
+  MetricType,
   PapelUsuario,
+  ReportFormat,
+  ReportJobStatus,
   StatusLote,
   StatusRastreamento,
   TipoEquipamento,

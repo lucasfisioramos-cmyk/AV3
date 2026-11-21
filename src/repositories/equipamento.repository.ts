@@ -39,6 +39,7 @@ export interface RegistrarMovimentacaoData {
   destino: string;
   responsavel: string;
   observacao?: string;
+  dataHora?: Date;
 }
 
 /** Visão de rastreamento: equipamento + lote (com organização resumida) + histórico. */
