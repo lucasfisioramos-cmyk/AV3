@@ -23,6 +23,33 @@ vi.mock('../src/repositories/equipamento.repository.js', async () => ({
 vi.mock('../src/repositories/relatorio.repository.js', async () => ({
   RelatorioRepository: (await import('./helpers/fakes.js')).db.relatorioRepository,
 }));
+vi.mock('../src/persistence/api-key.repository.js', async () => ({
+  ApiKeyRepository: (await import('./helpers/fakes.js')).db.apiKeyRepository,
+}));
+vi.mock('../src/persistence/analytics.repository.js', async () => ({
+  AnalyticsRepository: (await import('./helpers/fakes.js')).db.analyticsRepository,
+}));
+vi.mock('../src/persistence/report-job.repository.js', async () => ({
+  ReportJobRepository: (await import('./helpers/fakes.js')).db.reportJobRepository,
+}));
+vi.mock('../src/infrastructure/queue/queues.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/infrastructure/queue/queues.js')>();
+  return {
+    ...actual,
+    QueueDispatcher: {
+      enqueueAnalyticsCalculation: async (payload: import('../src/infrastructure/queue/queues.js').AnalyticsScheduledJobPayload) => {
+        const { db } = await import('./helpers/fakes.js');
+        db.enqueuedAnalytics.push(payload);
+        return { bullJobId: `bull-analytics-${db.enqueuedAnalytics.length}` };
+      },
+      enqueueReportExport: async (payload: import('../src/infrastructure/queue/queues.js').ReportExportJobPayload) => {
+        const { db } = await import('./helpers/fakes.js');
+        db.enqueuedReports.push(payload);
+        return { bullJobId: `bull-report-${payload.reportJobId}` };
+      },
+    },
+  };
+});
 vi.mock('../src/persistence/transaction.js', async () => ({
   executarEmTransacao: async <T>(operacao: (tx: object) => Promise<T>, opcoes?: { isolamento?: string }) =>
     (await import('./helpers/fakes.js')).db.transacao(operacao, opcoes),

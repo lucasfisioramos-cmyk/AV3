@@ -22,6 +22,10 @@ export interface Env {
   RATE_LIMIT_LOGIN_MAX: number;
   RATE_LIMIT_LOGIN_TIME_WINDOW: string;
   CORS_ORIGINS: string[];
+  REDIS_URL: string;
+  REPORTS_DIR: string;
+  ENABLE_CRON: boolean;
+  ANALYTICS_CRON_SCHEDULE: string;
 }
 
 export class EnvValidationError extends Error {
@@ -172,6 +176,33 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     if (corsOrigins.length === 0) corsOrigins = ['*'];
   }
 
+  // REDIS_URL (opcional, padrão redis://localhost:6379)
+  const redisUrl = isBlank(source.REDIS_URL) ? 'redis://localhost:6379' : source.REDIS_URL!.trim();
+  if (!/^rediss?:\/\//i.test(redisUrl)) {
+    issues.push('REDIS_URL deve ser uma URL Redis válida (redis://... ou rediss://...).');
+  }
+
+  // REPORTS_DIR (opcional, padrão ./storage/reports)
+  const reportsDir = isBlank(source.REPORTS_DIR) ? './storage/reports' : source.REPORTS_DIR!.trim();
+
+  // ENABLE_CRON (opcional, padrão false em test e true nos demais)
+  let enableCron = nodeEnv !== 'test';
+  const enableCronRaw = source.ENABLE_CRON?.trim().toLowerCase();
+  if (!isBlank(enableCronRaw)) {
+    if (enableCronRaw === 'true' || enableCronRaw === '1') {
+      enableCron = true;
+    } else if (enableCronRaw === 'false' || enableCronRaw === '0') {
+      enableCron = false;
+    } else {
+      issues.push(`ENABLE_CRON "${source.ENABLE_CRON}" é inválido. Use true ou false.`);
+    }
+  }
+
+  // ANALYTICS_CRON_SCHEDULE (opcional, padrão '0 2 * * *')
+  const analyticsCronSchedule = isBlank(source.ANALYTICS_CRON_SCHEDULE)
+    ? '0 2 * * *'
+    : source.ANALYTICS_CRON_SCHEDULE!.trim();
+
   if (issues.length > 0) {
     throw new EnvValidationError(issues);
   }
@@ -191,5 +222,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     RATE_LIMIT_LOGIN_MAX: rateLimitLoginMax,
     RATE_LIMIT_LOGIN_TIME_WINDOW: rateLimitLoginTimeWindow,
     CORS_ORIGINS: corsOrigins,
+    REDIS_URL: redisUrl,
+    REPORTS_DIR: reportsDir,
+    ENABLE_CRON: enableCron,
+    ANALYTICS_CRON_SCHEDULE: analyticsCronSchedule,
   };
 }

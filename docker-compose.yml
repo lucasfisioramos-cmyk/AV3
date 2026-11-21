@@ -20,6 +20,23 @@ services:
     networks:
       - greencode-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: greencode-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - greencode-network
+
   api:
     build:
       context: .
@@ -29,11 +46,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3000
       HOST: 0.0.0.0
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-root}@db:5432/${POSTGRES_DB:-greencode}?schema=public
+      REDIS_URL: redis://redis:6379
+      REPORTS_DIR: /app/storage/reports
+      ENABLE_CRON: ${ENABLE_CRON:-true}
+      ANALYTICS_CRON_SCHEDULE: ${ANALYTICS_CRON_SCHEDULE:-0 2 * * *}
       JWT_SECRET: ${JWT_SECRET:-segredo-de-producao-com-mais-de-32-caracteres-jwt-token!!}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
       JWT_ISSUER: ${JWT_ISSUER:-greencode-api}
@@ -48,6 +71,8 @@ services:
 volumes:
   postgres_data:
     name: greencode_postgres_data
+  redis_data:
+    name: greencode_redis_data
 
 networks:
   greencode-network:

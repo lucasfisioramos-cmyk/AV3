@@ -7,6 +7,17 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PasswordHasher } from '../../src/security/hasher.js';
 import type { PapelUsuario, StatusLote, StatusRastreamento, TipoEquipamento } from '../../src/domain/shared/enums.js';
+import type { ApiKeyMetadata, ApiKeyRepository } from '../../src/persistence/api-key.repository.js';
+import type {
+  AnalyticsHistoryRecord,
+  AnalyticsRepository,
+  EquipmentRULPredictionRecord,
+} from '../../src/persistence/analytics.repository.js';
+import type { ReportJobRecord, ReportJobRepository } from '../../src/persistence/report-job.repository.js';
+import type {
+  AnalyticsScheduledJobPayload,
+  ReportExportJobPayload,
+} from '../../src/infrastructure/queue/queues.js';
 import type { Contrato, Equipamento, Lote, Movimentacao, Organizacao, OrganizacaoDetalhe, TokenRevogado, Usuario } from '../../src/repositories/entities.js';
 import type { ContratoRepository } from '../../src/repositories/contrato.repository.js';
 import type { EquipamentoFiltro, EquipamentoRepository } from '../../src/repositories/equipamento.repository.js';
@@ -19,6 +30,7 @@ import type { UsuarioFiltro, UsuarioRepository } from '../../src/repositories/us
 export const SENHA_TESTE = 'Senha#Forte1';
 
 type UsuarioRow = Usuario & { hashSenha: string };
+type ApiKeyRow = ApiKeyMetadata & { keyHash: string };
 
 const erroPrisma = (code: string, meta?: Record<string, unknown>) =>
   new PrismaClientKnownRequestError(`erro simulado ${code}`, { code, clientVersion: 'teste', meta });
@@ -35,6 +47,12 @@ class BancoEmMemoria {
   equipamentos = new Map<string, Equipamento>();
   movimentacoes = new Map<string, Movimentacao>();
   tokensRevogados = new Map<string, TokenRevogado>();
+  apiKeys = new Map<string, ApiKeyRow>();
+  analyticsHistory = new Map<string, AnalyticsHistoryRecord>();
+  rulPredictions = new Map<string, EquipmentRULPredictionRecord>();
+  reportJobs = new Map<string, ReportJobRecord>();
+  enqueuedReports: ReportExportJobPayload[] = [];
+  enqueuedAnalytics: AnalyticsScheduledJobPayload[] = [];
 
   /** Opções de cada transação executada (permite verificar o isolamento usado). */
   transacoes: { isolamento?: string }[] = [];
@@ -42,10 +60,24 @@ class BancoEmMemoria {
   reset() {
     for (const tabela of this.tabelas()) tabela.clear();
     this.transacoes = [];
+    this.enqueuedReports = [];
+    this.enqueuedAnalytics = [];
   }
 
   private tabelas() {
-    return [this.usuarios, this.organizacoes, this.contratos, this.lotes, this.equipamentos, this.movimentacoes, this.tokensRevogados] as Map<string, unknown>[];
+    return [
+      this.usuarios,
+      this.organizacoes,
+      this.contratos,
+      this.lotes,
+      this.equipamentos,
+      this.movimentacoes,
+      this.tokensRevogados,
+      this.apiKeys,
+      this.analyticsHistory,
+      this.rulPredictions,
+      this.reportJobs,
+    ] as Map<string, unknown>[];
   }
 
   /** Executa `fn` de forma atômica: qualquer erro restaura o estado anterior (rollback). */
@@ -300,6 +332,191 @@ class BancoEmMemoria {
       this.metricas([...this.equipamentos.values()].filter((e) => this.lotes.get(e.loteId)?.organizacaoId === organizacaoId)),
   };
 
+  apiKeyRepository: ApiKeyRepository = {
+    create: async (data) => {
+      if ([...this.apiKeys.values()].some((k) => k.keyHash === data.keyHash)) {
+        throw erroPrisma('P2002', { target: ['keyHash'] });
+      }
+      const row: ApiKeyRow = {
+        id: randomUUID(),
+        partnerName: data.partnerName,
+        keyPrefix: data.keyPrefix,
+        keyHash: data.keyHash,
+        scopes: [...data.scopes],
+        isActive: true,
+        rateLimit: data.rateLimit ?? 100,
+        createdAt: new Date(),
+        expiresAt: data.expiresAt ?? null,
+      };
+      this.apiKeys.set(row.id, row);
+      return this.publicoApiKey(row)!;
+    },
+    findByHash: async (keyHash) =>
+      this.publicoApiKey([...this.apiKeys.values()].find((k) => k.keyHash === keyHash)),
+    findById: async (id) => this.publicoApiKey(this.apiKeys.get(id)),
+    findAll: async () =>
+      [...this.apiKeys.values()]
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map((k) => this.publicoApiKey(k)!),
+    revoke: async (id) => {
+      const atual = this.apiKeys.get(id);
+      if (!atual) throw erroPrisma('P2025');
+      const atualizado: ApiKeyRow = { ...atual, isActive: false };
+      this.apiKeys.set(id, atualizado);
+      return this.publicoApiKey(atualizado)!;
+    },
+  };
+
+  analyticsRepository: AnalyticsRepository = {
+    saveHistory: async (data) => {
+      const row: AnalyticsHistoryRecord = {
+        id: randomUUID(),
+        metricType: data.metricType,
+        dimension: data.dimension,
+        payload: structuredClone(data.payload),
+        calculatedAt: data.calculatedAt ?? new Date(),
+      };
+      this.analyticsHistory.set(row.id, row);
+      return row;
+    },
+    findHistoryByType: async (metricType, limit) => {
+      const lista = [...this.analyticsHistory.values()]
+        .filter((h) => h.metricType === metricType)
+        .sort((a, b) => b.calculatedAt.getTime() - a.calculatedAt.getTime());
+      return limit !== undefined ? lista.slice(0, limit) : lista;
+    },
+    saveRulPrediction: async (data) => {
+      const row: EquipmentRULPredictionRecord = {
+        id: randomUUID(),
+        ...data,
+        createdAt: new Date(),
+      };
+      this.rulPredictions.set(row.id, row);
+      return row;
+    },
+    findRulPredictions: async (filters = {}) => {
+      const lista = [...this.rulPredictions.values()]
+        .filter((r) => {
+          if (filters.tipoEquipamento && r.tipoEquipamento !== filters.tipoEquipamento) return false;
+          if (filters.marca && r.marca !== filters.marca) return false;
+          if (filters.modelo && r.modelo !== filters.modelo) return false;
+          return true;
+        })
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return filters.limit !== undefined ? lista.slice(0, filters.limit) : lista;
+    },
+    findEquipamentosParaAnalise: async (filters = {}) =>
+      [...this.equipamentos.values()]
+        .filter((e) => {
+          if (filters.tipo && e.tipo !== filters.tipo) return false;
+          if (filters.marca && e.marca !== filters.marca) return false;
+          if (filters.modelo && e.modelo !== filters.modelo) return false;
+          if (filters.loteId && e.loteId !== filters.loteId) return false;
+          const lote = this.lotes.get(e.loteId);
+          if (filters.organizacaoId && lote?.organizacaoId !== filters.organizacaoId) return false;
+          return true;
+        })
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+        .map((e) => {
+          const lote = this.lotes.get(e.loteId)!;
+          return {
+            id: e.id,
+            tipo: e.tipo,
+            marca: e.marca,
+            modelo: e.modelo,
+            anoFabricacao: e.anoFabricacao,
+            estadoFisico: e.estadoFisico,
+            pesoQuilogramas: e.pesoQuilogramas,
+            statusRastreamento: e.statusRastreamento,
+            loteId: e.loteId,
+            createdAt: e.createdAt,
+            lote: {
+              id: lote.id,
+              organizacaoId: lote.organizacaoId,
+              dataEntrada: lote.dataEntrada,
+              statusProcessamento: lote.statusProcessamento,
+            },
+          };
+        }),
+    findLotesParaAnalise: async () =>
+      [...this.lotes.values()]
+        .sort((a, b) => a.dataEntrada.getTime() - b.dataEntrada.getTime())
+        .map((l) => ({
+          id: l.id,
+          organizacaoId: l.organizacaoId,
+          dataEntrada: l.dataEntrada,
+          statusProcessamento: l.statusProcessamento,
+          createdAt: l.createdAt,
+          updatedAt: l.updatedAt,
+          totalEquipamentos: [...this.equipamentos.values()].filter((e) => e.loteId === l.id).length,
+        })),
+    findMovimentacoesParaAnalise: async (filters = {}) =>
+      [...this.movimentacoes.values()]
+        .filter((m) => {
+          if (filters.equipamentoId && m.equipamentoId !== filters.equipamentoId) return false;
+          if (filters.desde && m.dataHora < filters.desde) return false;
+          if (filters.ate && m.dataHora > filters.ate) return false;
+          return true;
+        })
+        .sort((a, b) => a.dataHora.getTime() - b.dataHora.getTime())
+        .map((m) => ({
+          id: m.id,
+          equipamentoId: m.equipamentoId,
+          loteId: this.equipamentos.get(m.equipamentoId)?.loteId ?? '',
+          dataHora: m.dataHora,
+          origem: m.origem,
+          destino: m.destino,
+          responsavel: m.responsavel,
+          createdAt: m.createdAt,
+        })),
+  };
+
+  reportJobRepository: ReportJobRepository = {
+    create: async (data) => {
+      if (data.bullJobId && [...this.reportJobs.values()].some((j) => j.bullJobId === data.bullJobId)) {
+        throw erroPrisma('P2002', { target: ['bullJobId'] });
+      }
+      const row: ReportJobRecord = {
+        id: randomUUID(),
+        bullJobId: data.bullJobId ?? null,
+        apiKeyId: data.apiKeyId,
+        reportType: data.reportType,
+        format: data.format,
+        status: 'PENDING',
+        filePath: null,
+        errorReason: null,
+        createdAt: new Date(),
+        completedAt: null,
+      };
+      this.reportJobs.set(row.id, row);
+      return row;
+    },
+    findById: async (id) => this.reportJobs.get(id) ?? null,
+    attachBullJobId: async (id, bullJobId) => {
+      const atual = this.reportJobs.get(id);
+      if (!atual) throw erroPrisma('P2025');
+      if ([...this.reportJobs.values()].some((j) => j.id !== id && j.bullJobId === bullJobId)) {
+        throw erroPrisma('P2002', { target: ['bullJobId'] });
+      }
+      const atualizado: ReportJobRecord = { ...atual, bullJobId };
+      this.reportJobs.set(id, atualizado);
+      return atualizado;
+    },
+    updateStatus: async (id, status, extra = {}) => {
+      const atual = this.reportJobs.get(id);
+      if (!atual) throw erroPrisma('P2025');
+      const atualizado: ReportJobRecord = {
+        ...atual,
+        status,
+        filePath: extra.filePath !== undefined ? extra.filePath : atual.filePath,
+        errorReason: extra.errorReason !== undefined ? extra.errorReason : atual.errorReason,
+        completedAt: extra.completedAt !== undefined ? extra.completedAt : atual.completedAt,
+      };
+      this.reportJobs.set(id, atualizado);
+      return atualizado;
+    },
+  };
+
   // ---------- Dados de teste ----------
 
   semear = {
@@ -364,6 +581,11 @@ class BancoEmMemoria {
   private publico(row: UsuarioRow | undefined): Usuario | null {
     if (!row) return null;
     const { hashSenha: _hash, ...publico } = row;
+    return publico;
+  }
+  private publicoApiKey(row: ApiKeyRow | undefined): ApiKeyMetadata | null {
+    if (!row) return null;
+    const { keyHash: _hash, ...publico } = row;
     return publico;
   }
   private resumoOrg(id: string) {
