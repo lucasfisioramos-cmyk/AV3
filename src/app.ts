@@ -21,6 +21,8 @@ import { errorHandler } from './errors/error-handler.js';
 import { usuarioRoutes } from './routes/usuario.js';
 import { authRoutes } from './routes/auth.js';
 import { AuthService } from './domain/auth/auth.service.js';
+import { apiKeyRoutes } from './api/routes/internal/api-key.routes.js';
+import { publicRoutes } from './api/routes/public/public.routes.js';
 
 const packageJson = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
@@ -60,7 +62,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       }
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-api-key', 'X-API-Key'],
     credentials: true,
   });
 
@@ -115,6 +117,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
             scheme: 'bearer',
             bearerFormat: 'JWT',
           },
+          apiKeyAuth: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'x-api-key',
+          },
         },
       },
       security: [{ bearerAuth: [] }],
@@ -144,6 +151,23 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   instance.register(equipamentoRoutes, { prefix: '/api/v1/equipamentos' });
   instance.register(relatorioRoutes, { prefix: '/api/v1/relatorios' });
   instance.register(usuarioRoutes, { prefix: '/api/v1/usuarios' });
+
+  // Segregação AV3: Rotas Internas (/api/v1/internal/*) e Rotas Públicas B2B (/api/v1/public/*)
+  instance.register(apiKeyRoutes, { prefix: '/api/v1/internal/api-keys' });
+  instance.register(authRoutes, {
+    prefix: '/api/v1/internal/auth',
+    rateLimit: {
+      max: options.rateLimit?.loginMax ?? env.RATE_LIMIT_LOGIN_MAX,
+      timeWindow: options.rateLimit?.loginTimeWindow ?? env.RATE_LIMIT_LOGIN_TIME_WINDOW,
+    },
+  });
+  instance.register(organizacaoRoutes, { prefix: '/api/v1/internal/organizacoes' });
+  instance.register(loteRoutes, { prefix: '/api/v1/internal/lotes' });
+  instance.register(equipamentoRoutes, { prefix: '/api/v1/internal/equipamentos' });
+  instance.register(relatorioRoutes, { prefix: '/api/v1/internal/relatorios' });
+  instance.register(usuarioRoutes, { prefix: '/api/v1/internal/usuarios' });
+
+  instance.register(publicRoutes, { prefix: '/api/v1/public' });
 
   // Handler Global de Erros (mapeamento centralizado em src/errors)
   instance.setErrorHandler(errorHandler);

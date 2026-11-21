@@ -21,3 +21,15 @@ export interface AuthenticatedUser extends JwtClaims {
   iss: string;
   aud: string | string[];
 }
+
+/** Metadados da API Key autenticada via header `x-api-key`, disponíveis em `request.apiKey`. */
+export interface AuthenticatedApiKey {
+  id: string;
+  partnerName: string;
+  keyPrefix: string;
+  scopes: string[];
+  isActive: boolean;
+  rateLimit: number;
+  createdAt: Date;
+  expiresAt: Date | null;
+}
